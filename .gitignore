@@ -1,0 +1,21 @@
+# Python etc.
+__pycache__/
+*.pyc
+*.pyo
+.env
+conda/
+*.DS_Store
+
+# Data
+*.csv
+data/
+
+
+# Other
+.lintr
+to-dos/
+.claude/
+notes/
+
+# Temporary
+999_check_high_lev.py

@@ -4,7 +4,7 @@ from polars import col, lit, when
 
 # ------ COUNTY TO CBSA CROSSWALK -----------------------------------------
 
-crosswalk_raw = pl.read_csv("data/crosswalks/cbsa2fipsxw_2023.csv")
+crosswalk_raw = pl.read_csv("data/external/crosswalks/cbsa2fipsxw_2023.csv")
 crosswalk = (
     crosswalk_raw
     .select("countycountyequivalent", "statename", "cbsacode")
@@ -15,17 +15,16 @@ crosswalk = (
 household_raw = pl.read_csv("data/raw/AHS 2023 National PUF v1.1 CSV/household.csv")
 
 
-yearly_inc = household_raw["HINCP"]
 yearly_utils_cost = household_raw["UTILAMT"] * 12
+# Yearly income is HINCP
 
 household = (
     household_raw
     .with_columns(yearly_utils_cost.alias("yearly_utils_cost"))
-    .with_columns(yearly_inc.alias("yearly_inc"))
 )
 
 household = household.with_columns(
-    when(col("yearly_utils_cost") > 0.1 * col("yearly_inc"))
+    when(col("yearly_utils_cost") > 0.1 * col("HINCP"))
     .then(1)
     .otherwise(0)
     .alias("energy_poverty")
@@ -117,5 +116,11 @@ ahs_climate_joined.shape
 
 ahs_climate_joined["OMB13CBSA"].n_unique() # 15 unique metro regions
 
+# ------------------------------------------------------
 
-ahs_climate_joined.write_csv("data/precleaning/ahs_climate_joined.csv")
+print("\nScript ran successfully.\n")
+
+csv_string = "data/transitory/ahs_climate_joined.csv"
+ahs_climate_joined.write_csv(csv_string)
+
+print(f"\nWrote file to \"{csv_string}\" \n")

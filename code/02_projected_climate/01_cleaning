@@ -1,4 +1,7 @@
-import xarray as ax
+import xarray as xr
 import polars as pl
 
 ds = xr.open_dataset("data/raw/CMIP6-LOCA2_Thresholds_1950-2100_County2023_annual.nc")
+
+
+hdd = pl.from_pandas(ds["HDD"].to_dataframe.reset_index())

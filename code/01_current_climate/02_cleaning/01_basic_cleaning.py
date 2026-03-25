@@ -12,10 +12,11 @@
 """
 
 
-# ---- Imports and load data ----
+# --- Imports and load data ---
 import polars as pl
 import polars.selectors as cs
 from polars import col, lit, when
+import pandas as pd
 
 ahs_climate_raw = pl.read_csv("data/transitory/ahs_climate_joined.csv")
 
@@ -23,7 +24,7 @@ ahs_climate_raw = pl.read_csv("data/transitory/ahs_climate_joined.csv")
 
 # --------------------------------------------------------------------------------
 
-# ---- Drop columns ----
+# --- Drop columns ---
 # WEIGHT|WGT are columns telling you how to replicate the weights
 # J* flags tell you how variables were recorded
 # Columns we don't want in our model (leak, mold)
@@ -41,7 +42,7 @@ ahs_climate = (
     .drop("UTILAMT", "INTSTATUS", "ELECAMT", "GASAMT", "OILAMT", "TRASHAMT", "WATERAMT", "SPLITSAMP")
 )
 
-# Now drop low variance columns
+# --- Drop low variance columns ---
 
 low_var_threshold = 0.95
 low_var_cols = [
@@ -65,7 +66,7 @@ ahs_climate = (
 ahs_climate.null_count()
 
 
-# Drop columns with too many null values
+# --- Drop columns with too many null values ---
 null_threshold = 0.2
 too_many_nulls = [
     c for c in ahs_climate.columns if ahs_climate[c].null_count()
@@ -77,18 +78,31 @@ ahs_climate = (
     .drop(too_many_nulls)
 )
 
-# Drop columns that are only in 2023 year
+# --- Drop columns that are only in 2023 year ---
 only_2023 = ["SOGIRESP", "HHSOGILGBT", "HHSOGISO", "HHSOGIG", "HHGEN"]
 ahs_climate = ahs_climate.drop(only_2023)
 
 
-# Drop rows in the outcome column that are NA
+# --- Drop rows in the outcome column that are NA ---
+#print(ahs_climate.height) # 26700
+ahs_climate = (
+    ahs_climate
+    .filter(col("energy_poverty").is_not_null())
+)
+#print(ahs_climate.height) #26700, so no rows removed
+
+print("Energy Poverty variable: \n")
+print(ahs_climate.select(col("energy_poverty").value_counts(sort=True)))
+# About 17% are in energy poverty by my definition (4581 in EP, 22119 not in EP)
 
 
-# Write the data
+# --------------------------------------------------------------------------------
+print("\nRan script successfully. Writing data now... \n")
 
-ahs_climate.write_csv("data/transitory/basic_clean_ahs_climate.csv")
+# --- Write the data ---
+csv_string = "data/transitory/basic_clean_ahs_climate.csv"
+ahs_climate.write_csv(csv_string)
 
 
-print("\nRan script successfully.\n")
+print(f"\nData written to: \"{csv_string}\"\n")
 

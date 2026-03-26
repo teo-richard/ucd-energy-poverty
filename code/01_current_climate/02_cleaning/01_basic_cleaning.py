@@ -18,7 +18,7 @@ import polars.selectors as cs
 from polars import col, lit, when
 import pandas as pd
 
-ahs_climate_raw = pl.read_csv("data/transitory/ahs_climate_joined.csv")
+ahs_climate_raw = pl.read_csv("data/transitory/01_01_01_joined_ahs_climate.csv")
 
 
 
@@ -96,13 +96,45 @@ print(ahs_climate.select(col("energy_poverty").value_counts(sort=True)))
 # About 17% are in energy poverty by my definition (4581 in EP, 22119 not in EP)
 
 
+# --- Turn columns to numeric to make them easier to work with in the future ---
+var = "HHPRNTHOME"
+ahs_climate[var].dtype == pl.String
+ahs_climate[var].dtype == pl.Float64
+
+is_i64_float64 = []
+not_converted = []
+colnames = ahs_climate.columns
+for var in colnames:
+    if ahs_climate[var].dtype == pl.String:
+        try:
+            ahs_climate = ahs_climate.with_columns(
+                col(var).str.to_integer().alias(var)
+            )
+            is_i64_float64.append(var)
+        except:
+            print(f"\nError occurred with variable ** {var} ** \n")
+    elif (ahs_climate[var].dtype == pl.Int64) | (ahs_climate[var].dtype == pl.Float64):
+        is_i64_float64.append(var)
+    else:
+        not_converted.append(var) # None in this list!
+
+for var in colnames:
+    if (ahs_climate[var].dtype != pl.Int64) & (ahs_climate[var].dtype != pl.Float64):
+        print(var)
+# Does not print anything therefore all our variables are encoded as numeric
+# All we did was strip everything of the string encoding since it was all numbers encoded as strings
+# There were no awkward variables so didn't have to do any extra work :)
+
+
 # --------------------------------------------------------------------------------
-print("\nRan script successfully. Writing data now... \n")
+print("\nRan script successfully.")
+print(f"Data shape: {ahs_climate.shape}")
 
 # --- Write the data ---
-csv_string = "data/transitory/basic_clean_ahs_climate.csv"
+csv_string = "data/transitory/01_02_01_basic_clean_ahs_climate.csv"
+print(f"\nWriting data to {csv_string} now...")
 ahs_climate.write_csv(csv_string)
 
 
-print(f"\nData written to: \"{csv_string}\"\n")
+print(f"\nData written to: \"{csv_string}\"\n\n")
 

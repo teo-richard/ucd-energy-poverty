@@ -31,6 +31,8 @@ household = household.with_columns(
 )
 
 
+
+
 # ------ NCLIMGRID -----------------------------------------
 
 cdd_2023_raw = pl.read_csv("data/raw/NClimGrid/2023_nclimgrid_cdd.csv")

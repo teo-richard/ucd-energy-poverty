@@ -6,7 +6,6 @@ import pandas as pd
 ahs_climate = pl.read_csv("data/transitory/01_02_02_data_checked_ahs_climate.csv")
 
 
-
 # ---------- Creating Featues ----------
 
 # --- Feature: PARFOREIGNCOUNTRY ---
@@ -52,7 +51,7 @@ ahs_climate = (
 
 
 
-# ---------- Drop parent variables ----------
+# ---------- Drop source variables ----------
 ahs_climate = ahs_climate.drop(
     ("HHFNTVTY", "HHMNTVTY", "HHNATVTY")
 )
@@ -65,6 +64,7 @@ print(f"Data shape: {ahs_climate.shape}")
 csv_string = "data/transitory/01_02_03_features_engineered_ahs_climate.csv"
 print(f"\nWriting data to {csv_string} now...")
 ahs_climate.write_csv(csv_string)
+
 
 
 print(f"\nData written to: \"{csv_string}\"\n\n")

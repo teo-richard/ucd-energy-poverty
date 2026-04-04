@@ -126,6 +126,12 @@ for var in colnames:
 # There were no awkward variables so didn't have to do any extra work :)
 
 
+# --- Quick fix of PERPOVLVL ---
+ahs_climate = ahs_climate.with_columns(
+    pl.col("PERPOVLVL")
+    .replace({1: 0, 501: 501})
+)
+
 # --------------------------------------------------------------------------------
 print("\nRan script successfully.")
 print(f"Data shape: {ahs_climate.shape}")

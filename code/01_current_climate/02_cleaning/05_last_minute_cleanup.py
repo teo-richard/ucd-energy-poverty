@@ -2,7 +2,7 @@ import polars as pl
 import polars.selectors as cs
 from polars import col, lit, when
 
-ahs_climate = pl.read_csv("data/transitory/01_02_04_cat_collapsed_ahs_climate.csv")
+ahs_climate = pl.read_csv("data/interim/current_climate/01_02_04_cat_collapsed_ahs_climate.csv")
 
 ahs_climate = ahs_climate.drop(["TOTHCAMT", "INSURAMT"])
 
@@ -11,7 +11,7 @@ ahs_climate = ahs_climate.drop("yearly_utils_cost")
 
 
 # --------------------------------------------------------------------------------
-csv_string = "data/processed/LightGBM_data/01_02_04_ready_for_lightgbm_ahs_climate.csv"
+csv_string = "data/processed/current_climate/01_02_05_basic_ready_for_trees_ahs_climate.csv"
 
 
 print(f"\nWriting data to {csv_string} now...")

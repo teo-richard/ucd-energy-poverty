@@ -18,23 +18,24 @@ import polars.selectors as cs
 from polars import col, lit, when
 import pandas as pd
 
-ahs_climate_raw = pl.read_csv("data/transitory/01_01_01_joined_ahs_climate.csv")
+ahs_climate_raw = pl.read_csv("data/interim/current_climate/01_01_01_joined_ahs_climate.csv")
 
 
 
 # --------------------------------------------------------------------------------
 
 # --- Drop columns ---
+# NOTE: KEEP CONTROL UNTIL END IN CASE WE WANT TO ADD SOME COLUMN BACK
+# NOTE: KEEP 
 # WEIGHT|WGT are columns telling you how to replicate the weights
 # J* flags tell you how variables were recorded
 # Columns we don't want in our model (leak, mold)
-# Control variables
 # ---- Filter rows ----
 # Keep only occupied interview (INTSTATUS == 1)
 ahs_climate = (
     ahs_climate_raw
     .with_columns(cs.string().str.replace_all("'", ""))
-    .select(cs.all() - cs.matches("(?i)(WEIGHT|WGT|^J\\w|CONTROL)"))
+    .select((cs.all() - cs.matches("(?i)(WEIGHT|WGT|^J)")) | cs.matches("(?i)^WEIGHT$")) # Get the weight column we want back in
     .select(cs.all() - cs.matches("(?i)LEAK|MOLD"))
     .filter(
         col("INTSTATUS") == "1"
@@ -137,7 +138,7 @@ print("\nRan script successfully.")
 print(f"Data shape: {ahs_climate.shape}")
 
 # --- Write the data ---
-csv_string = "data/transitory/01_02_01_basic_clean_ahs_climate.csv"
+csv_string = "data/interim/current_climate/01_02_01_basic_clean_ahs_climate.csv"
 print(f"\nWriting data to {csv_string} now...")
 ahs_climate.write_csv(csv_string)
 

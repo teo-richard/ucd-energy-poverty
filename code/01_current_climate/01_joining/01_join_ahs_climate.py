@@ -122,7 +122,7 @@ ahs_climate_joined["OMB13CBSA"].n_unique() # 15 unique metro regions
 
 print("\nScript ran successfully.\n")
 
-csv_string = "data/transitory/01_01_01_joined_ahs_climate.csv"
+csv_string = "data/interim/current_climate/01_01_01_joined_ahs_climate.csv"
 ahs_climate_joined.write_csv(csv_string)
 
 print(f"\nWrote file to \"{csv_string}\" \n")

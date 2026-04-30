@@ -5,8 +5,8 @@ import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, classification_report
 
-ahs_climate_full = pl.read_csv("data/interim/01_02_04_cat_collapsed_ahs_climate.csv")
-ahs_climate = pl.read_csv("data/processed/LightGBM_data/01_02_04_ready_for_lightgbm_ahs_climate.csv")
+ahs_climate_full = pl.read_csv("data/interim/current_climate/01_02_04_cat_collapsed_ahs_climate.csv")
+ahs_climate = pl.read_csv("data/processed/current_climate/01_02_05_basic_ready_for_trees_ahs_climate.csv")
 
 # --- Train and test splits ---
 X = ahs_climate.drop(["energy_poverty"])

@@ -1,0 +1,16 @@
+[project]
+name = "ucd-energy-poverty"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "dask[array]>=2026.3.0",
+    "lightgbm>=4.6.0",
+    "netcdf4>=1.7.4",
+    "pandas>=3.0.2",
+    "polars>=1.40.1",
+    "scikit-learn>=1.8.0",
+    "shap>=0.51.0",
+    "xarray>=2026.4.0",
+    "xgboost>=3.2.0",
+]

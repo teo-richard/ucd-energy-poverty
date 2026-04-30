@@ -33,61 +33,61 @@ household = household.with_columns(
 
 
 
-# ------ NCLIMGRID -----------------------------------------
+# ------ NOAA -----------------------------------------
 
-cdd_2023_raw = pl.read_csv("data/raw/NClimGrid/2023_nclimgrid_cdd.csv")
-cdd_2023 = (
-    cdd_2023_raw
+mintemp_2023_raw = pl.read_csv("data/raw/NOAA/2023_noaa_mintemp.csv", skip_rows=3, truncate_ragged_lines=True)
+mintemp_2023 = (
+    mintemp_2023_raw
     .select("ID", "Name", "State", "Value")
 )
-hdd_2023_raw = pl.read_csv("data/raw/NClimGrid/2023_nclimgrid_hdd.csv")
-hdd_2023 = (
-    hdd_2023_raw
+maxtemp_2023_raw = pl.read_csv("data/raw/NOAA/2023_noaa_maxtemp.csv", skip_rows=3, truncate_ragged_lines=True)
+maxtemp_2023 = (
+    maxtemp_2023_raw
     .select("ID", "Name", "State", "Value")
 )
 
-cdd_hdd_2023 = cdd_2023.join(
-    hdd_2023, on = ["ID", "Name", "State"], how = "inner"
+minmax_2023 = mintemp_2023.join(
+    maxtemp_2023, on = ["ID", "Name", "State"], how = "inner"
 )
 
 
-cdd_hdd_2023 = cdd_hdd_2023.rename({
-    "Value": "cdd_value",
-    "Value_right": "hdd_value"
+minmax_2023 = minmax_2023.rename({
+    "Value": "mintemp_value",
+    "Value_right": "maxtemp_value"
 })
 
 
-cdd_hdd_2023.head
-cdd_hdd_2023.shape
+minmax_2023.head
+minmax_2023.shape
 
 
-cdd_hdd_2023_with_cbsa = cdd_hdd_2023.join(
+minmax_2023_with_cbsa = minmax_2023.join(
     crosswalk, 
     left_on = ["Name", "State"],
     right_on = ["countycountyequivalent", "statename"],
     how = "left"
     )
 
-cdd_hdd_2023_with_cbsa.head
-cdd_hdd_2023_with_cbsa.shape
+minmax_2023_with_cbsa.head
+minmax_2023_with_cbsa.shape
 
 rural_counties = (
-    cdd_hdd_2023_with_cbsa
+    minmax_2023_with_cbsa
     .filter(col("cbsacode").is_null())
 )
 
-cdd_hdd_2023_no_rural = (
-    cdd_hdd_2023_with_cbsa
+minmax_2023_no_rural = (
+    minmax_2023_with_cbsa
     .filter(~col("cbsacode").is_null())
 )
 
-cdd_hdd_2023_no_rural.shape
+minmax_2023_no_rural.shape
 household.shape
 
 # ------ Join cdd_hdd_2023_no_rural with AHS -----------------------------------------
 
 # Turn the CBSA code in the climate data into a string so we can merge on this
-cdd_hdd_2023_no_rural = cdd_hdd_2023_no_rural.with_columns(col("cbsacode").cast(str))
+minmax_2023_no_rural = minmax_2023_no_rural.with_columns(col("cbsacode").cast(str))
 
 
 # In the AHS data, strip the quotes out of the CBSA codes
@@ -98,18 +98,18 @@ household = (
 
 # 2. Aggregate the climate by metro area (i.e. by CBSA code)
 #   If you don't do this then in the join, each county will have multiple rows from AHS attached to it
-cdd_hdd_2023_no_rural = (
-    cdd_hdd_2023_no_rural
+minmax_2023_no_rural = (
+    minmax_2023_no_rural
     .group_by("cbsacode")
     .agg(
-        col("cdd_value").mean().alias("cdd_value"),
-        col("hdd_value").mean().alias("hdd_value")
+        col("mintemp_value").mean().alias("mintemp_value"),
+        col("maxtemp_value").mean().alias("maxtemp_value")
     )
 )
 
 
 ahs_climate_joined = household.join(
-    cdd_hdd_2023_no_rural,
+    minmax_2023_no_rural,
     left_on = "OMB13CBSA", right_on = "cbsacode",
     how = "inner"
 )

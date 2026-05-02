@@ -1,7 +1,7 @@
 """
 # This script:
 # DROPS COLUMNS
-    # WEIGHT|WGT
+    # WEIGHT|WGT (except the one weight we do want)
     # J* flags
     # Columns we don't want in our models
     # Control variables
@@ -18,7 +18,7 @@ import polars.selectors as cs
 from polars import col, lit, when
 import pandas as pd
 
-ahs_climate_raw = pl.read_csv("data/interim/current_climate/01_01_01_joined_ahs_climate.csv")
+ahs_climate_raw = pl.read_csv("data/interim/current_climate/01_01_02_joined_ahs_climate.csv")
 
 
 

@@ -16,7 +16,7 @@ exp_id_vals = ds["experiment_id"].values  # shape (72,), already decoded strings
 # Shape: (time=1812, ensemble=72, GEOID=3109)
 # Available scenarios: "ssp245", "ssp370", "ssp585"
 
-SCENARIO = "ssp585"
+SCENARIO = "ssp585" # This is the worst scenario wrt pollution/fossil fuel reliance
 
 ensemble_mask = exp_id_vals == SCENARIO
 ds_scen = ds[["tasmin", "tasmax", "tas"]].isel(ensemble=ensemble_mask).sel(
@@ -49,5 +49,17 @@ for t_start in range(0, ds_scen.sizes["time"], TIME_CHUNK):
 
 df = pl.concat(frames)
 
-df = df.drop("ensemble")
-df.write_csv("processed/projected_climate/cmip6_locs2_tax_vars.csv")
+df = (
+    df
+    .drop("ensemble")
+    .with_columns(pl.col("date").dt.year().alias("year"))
+    .group_by("year", "GEOID")
+    .agg(
+        pl.col("tasmin").mean(),
+        pl.col("tasmax").mean(),
+        pl.col("tas").mean(),
+    )
+    .sort("year", "GEOID")
+)
+
+df.write_csv("data/interim/projected_climate/02_01_cmip6_loca2_tas_vars.csv")

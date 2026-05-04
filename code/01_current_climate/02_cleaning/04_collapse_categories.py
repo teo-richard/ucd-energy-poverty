@@ -19,7 +19,6 @@ print("\n")
 low_num_distinct_cat = [
                 "TENURE", 
                 "INTLANG", 
-                "INTMONTH",
                 "HHMAR", 
                 "HHCITSHP", 
                 "HSHLDTYPE", 

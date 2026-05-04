@@ -62,4 +62,10 @@ df = (
     .sort("year", "GEOID")
 )
 
-df.write_csv("data/interim/projected_climate/02_01_cmip6_loca2_tas_vars.csv")
+df_fah_units = df.with_columns([
+    ((pl.col("tasmin") * 9/5) + 32).alias("tasmin"),
+    ((pl.col("tasmax") * 9/5) + 32).alias("tasmax"),
+    ((pl.col("tas") * 9/5) + 32).alias("tas"),
+])
+
+df_fah_units.write_csv("data/interim/projected_climate/02_01_cmip6_loca2_tas_vars.csv")

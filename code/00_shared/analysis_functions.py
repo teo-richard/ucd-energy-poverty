@@ -1,10 +1,31 @@
+import os
 import pickle
+import joblib
 import polars as pl
 import lightgbm as lgb
 import xgboost as xgb
 import pandas as pd
 import shap
 from sklearn.metrics import roc_auc_score, classification_report
+import matplotlib.pyplot as plt
+
+
+def save_model(model, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    joblib.dump(model, path)
+
+
+def load_model(path):
+    return joblib.load(path)
+
+
+def prepare_cat_cols(X_pd, cat_cols):
+    """Apply sentinel/int/category encoding for XGBoost categorical columns."""
+    X = X_pd.copy()
+    for col in cat_cols:
+        if col in X.columns:
+            X[col] = X[col].fillna(-1).astype(int).astype("category")
+    return X
 
 
 def load_splits(processed_dir, prefix):
@@ -74,7 +95,7 @@ def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label=""):
     importance = pd.Series(model.feature_importances_, index=X_train_pd.columns)
     print(importance.sort_values(ascending=False).head(20))
 
-    return model
+    return model, X_test_pd
 
 
 def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
@@ -98,9 +119,8 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
         # Polars → Pandas converts nullable int columns with NaN to float.
         # Fill with sentinel -1, cast to int, then category so XGBoost
         # receives valid categorical dtypes (not floats).
-        for col in cat_cols:
-            X_train_pd[col] = X_train_pd[col].fillna(-1).astype(int).astype("category")
-            X_test_pd[col]  = X_test_pd[col].fillna(-1).astype(int).astype("category")
+        X_train_pd = prepare_cat_cols(X_train_pd, cat_cols)
+        X_test_pd  = prepare_cat_cols(X_test_pd, cat_cols)
 
     model = xgb.XGBClassifier(
         enable_categorical=True,
@@ -138,9 +158,38 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     }).sort("importance", descending=True)
     print(importance.head(20))
 
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_test_pd)
-    shap.plots.waterfall(explainer(X_test_pd)[0])
-    shap.summary_plot(shap_values, X_test_pd)
+    return model, X_test_pd
 
-    return model
+
+def run_shap(model, X_test_pd, name, label="", max_samples=500): # Max samples=None one if you want the full dataset passed
+    """
+    Run SHAP TreeExplainer on a fitted model and display a waterfall + summary plot.
+
+    max_samples: randomly subsample rows before computing SHAP values so this
+    doesn't hang on large datasets. Set to None to use all rows.
+    """
+    header = f" — {label}" if label else ""
+    print(f"\n\nSHAP ANALYSIS{header}")
+    print("--------------------------------------------------------")
+
+    if max_samples is not None and len(X_test_pd) > max_samples:
+        X_shap = X_test_pd.sample(n=max_samples, random_state=42)
+    else:
+        X_shap = X_test_pd
+
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_shap)
+
+    plt.figure(figsize=(10, 6))
+    shap.plots.waterfall(explainer(X_shap)[0], show=False)
+    plt.tight_layout()
+    plt.savefig(f'shap_images/{name}_waterfall.png')
+    plt.clf()
+
+    plt.figure(figsize=(10, 6))
+    shap.summary_plot(shap_values, X_shap, show=False)
+    plt.tight_layout()
+    plt.savefig(f'shap_images/{name}_summary.png')
+    plt.clf()
+
+

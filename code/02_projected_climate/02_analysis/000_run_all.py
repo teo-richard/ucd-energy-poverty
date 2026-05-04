@@ -5,7 +5,6 @@ script_dir   = Path(__file__).parent
 project_root = script_dir.parents[2]
 
 scripts = [
-    "00.1_analysis_module.py",
     "01_lightgbm_analysis.py",
     "02_xgboost_analysis.py",
 ]

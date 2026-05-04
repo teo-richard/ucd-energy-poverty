@@ -1,34 +1,59 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_splits, run_xgboost
-
+from analysis_functions import load_model, run_shap, prepare_cat_cols
+import polars as pl
 
 CAT_COLS = [  # Does not include SEWTYPE and ASECONDRY because we dropped those
-    "TENURE", "BLD", "INTLANG", "DIVISION", "INTMONTH", "OMB13CBSA",
+    "TENURE", "BLD", "INTLANG", "DIVISION", "OMB13CBSA",
     "HHMAR", "HHRACE", "HHCITSHP", "HSHLDTYPE", "MILHH", "PARTNER",
     "COOKFUEL", "DRYER", "HOTWATER", "HEATFUEL", "HEATTYPE",
     "ACPRIMARY", "SUPP1HEAT", "FIREPLACE", "MULTIGEN", "SAMEHHLD",
 ]
 
-YEARS = [2030, 2040, 2050]
+CAT_COLS_NO_CBSA = [col for col in CAT_COLS if col != "OMB13CBSA"]
 
+YEARS = [2050]
+COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT"]
+TEMP_RENAME = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
+
+model_w     = load_model("data/processed/models/current_climate_xgboost_with_weights.pkl")
+model_nw    = load_model("data/processed/models/current_climate_xgboost_without_weights.pkl")
+model_nc_w  = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
+model_nc_nw = load_model("data/processed/models/current_climate_xgboost_no_cbsa_without_weights.pkl")
+
+# --- With CBSA ---
 for year in YEARS:
     print(f"\n\n{'=' * 60}")
     print(f"YEAR: {year}")
     print("=" * 60)
 
-    splits, splits_nw = load_splits(
-        "data/processed/projected_climate",
-        f"02_02_00_{year}"
-    )
+    data = pl.read_csv(f"data/processed/projected_climate/02_02_ahs_cmip_{year}.csv").rename(TEMP_RENAME)
+    X = prepare_cat_cols(
+        data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas(),
+        CAT_COLS,
+    )[list(model_w.get_booster().feature_names)]
 
-    # Compute class imbalance ratio from training labels for this year's data
-    n_neg = (splits["y_train"] == 0).sum()
-    n_pos = (splits["y_train"] == 1).sum()
-    scale_pos_weight = round(n_neg / n_pos, 2)
+    mean_w = model_w.predict_proba(X)[:, 1].mean()
+    print(f"WITH WEIGHTS model    — mean predicted EP probability: {mean_w:.4f}")
+    run_shap(model_w, X, name=f"proj_climate_xgboost_{year}", label=f"WITH WEIGHTS — {year}")
 
-    run_xgboost(**splits, cat_cols=CAT_COLS, scale_pos_weight=scale_pos_weight,
-                label=f"WITH WEIGHTS — {year}")
-    run_xgboost(**{k: splits_nw[k] for k in ["X_train", "X_test", "y_train", "y_test"]},
-                cat_cols=CAT_COLS, scale_pos_weight=scale_pos_weight,
-                label=f"WITHOUT WEIGHTS — {year}")
+    mean_nw = model_nw.predict_proba(X)[:, 1].mean()
+    print(f"WITHOUT WEIGHTS model — mean predicted EP probability: {mean_nw:.4f}")
+
+# --- Without CBSA (2050 only) ---
+print(f"\n\n{'=' * 60}")
+print("YEAR: 2050 — no CBSA")
+print("=" * 60)
+
+data_nc = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050_no_cbsa.csv").rename(TEMP_RENAME)
+X_nc = prepare_cat_cols(
+    data_nc.drop([c for c in COLS_TO_DROP if c in data_nc.columns]).to_pandas(),
+    CAT_COLS_NO_CBSA,
+)[list(model_nc_w.get_booster().feature_names)]
+
+mean_nc_w = model_nc_w.predict_proba(X_nc)[:, 1].mean()
+print(f"WITH WEIGHTS model    — mean predicted EP probability: {mean_nc_w:.4f}")
+run_shap(model_nc_w, X_nc, name="proj_climate_xgboost_no_cbsa_2050", label="WITH WEIGHTS — 2050 no CBSA")
+
+mean_nc_nw = model_nc_nw.predict_proba(X_nc)[:, 1].mean()
+print(f"WITHOUT WEIGHTS model — mean predicted EP probability: {mean_nc_nw:.4f}")

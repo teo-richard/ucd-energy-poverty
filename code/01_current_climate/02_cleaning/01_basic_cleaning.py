@@ -9,6 +9,7 @@
     # Low variance columns
     # Too many null values
     # Columns that only exist in 2023
+    # Interview Month
 """
 
 
@@ -25,7 +26,6 @@ ahs_climate_raw = pl.read_csv("data/interim/current_climate/01_01_02_joined_ahs_
 # --------------------------------------------------------------------------------
 
 # --- Drop columns ---
-# NOTE: KEEP CONTROL UNTIL END IN CASE WE WANT TO ADD SOME COLUMN BACK
 # NOTE: KEEP 
 # WEIGHT|WGT are columns telling you how to replicate the weights
 # J* flags tell you how variables were recorded
@@ -40,7 +40,7 @@ ahs_climate = (
     .filter(
         col("INTSTATUS") == "1"
     )
-    .drop("UTILAMT", "INTSTATUS", "ELECAMT", "GASAMT", "OILAMT", "TRASHAMT", "WATERAMT", "SPLITSAMP")
+    .drop("UTILAMT", "INTSTATUS", "ELECAMT", "GASAMT", "OILAMT", "TRASHAMT", "WATERAMT", "SPLITSAMP", "INTMONTH", "CONTROL")
 )
 
 # --- Drop low variance columns ---

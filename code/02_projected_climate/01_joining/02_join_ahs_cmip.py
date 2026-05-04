@@ -55,8 +55,10 @@ def join_ahs_with_cmip(years):
             how="inner"
         )
         ahs_cmip_joined.write_csv(f"data/processed/projected_climate/02_02_ahs_cmip_{year}.csv")
+        ahs_cmip_joined_no_cbsa = ahs_cmip_joined.drop("OMB13CBSA")
+        ahs_cmip_joined_no_cbsa.write_csv(f"data/processed/projected_climate/02_02_ahs_cmip_{year}_no_cbsa.csv")
 
-    return
+    return 
 
 
 join_ahs_with_cmip(YEARS)

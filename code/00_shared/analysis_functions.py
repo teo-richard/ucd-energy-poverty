@@ -28,13 +28,15 @@ def prepare_cat_cols(X_pd, cat_cols):
     return X
 
 
-def load_splits(processed_dir, prefix):
+def load_splits(processed_dir, prefix, cbsa=True):
     """
     Load weighted and unweighted train/test split pickles.
 
     Expects:
       {processed_dir}/with_weights/{prefix}_{name}.pkl
       {processed_dir}/without_weights/{prefix}_{name}_no_weight.pkl
+
+    cbsa=False drops OMB13CBSA from X_train and X_test after loading.
 
     Returns (splits_weighted, splits_unweighted) as dicts with keys
     X_train, X_test, y_train, y_test (and w_train for the weighted dict).
@@ -51,14 +53,21 @@ def load_splits(processed_dir, prefix):
         with open(path, "rb") as f:
             splits_unweighted[name] = pickle.load(f)
 
+    if not cbsa:
+        for splits in [splits_weighted, splits_unweighted]:
+            for key in ["X_train", "X_test"]:
+                if key in splits and "OMB13CBSA" in splits[key].columns:
+                    splits[key] = splits[key].drop("OMB13CBSA")
+
     return splits_weighted, splits_unweighted
 
 
-def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label=""):
+def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label="", cbsa=True):
     """
     Train and evaluate a LightGBM classifier.
 
     Pass w_train for a weighted run; omit (or pass None) for unweighted.
+    cbsa=False drops OMB13CBSA from the feature set before training.
     Prints AUC-ROC, classification report, and top-20 feature importance.
     """
     header = f"LIGHTGBM {label}".strip() if label else "LIGHTGBM"
@@ -76,6 +85,10 @@ def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label=""):
 
     X_train_pd = X_train.to_pandas()
     X_test_pd  = X_test.to_pandas()
+
+    if not cbsa:
+        X_train_pd = X_train_pd.drop(columns=["OMB13CBSA"], errors="ignore")
+        X_test_pd  = X_test_pd.drop(columns=["OMB13CBSA"],  errors="ignore")
 
     fit_kwargs = dict(
         eval_set=[(X_test_pd, y_test.to_numpy())],
@@ -99,13 +112,14 @@ def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label=""):
 
 
 def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
-                cat_cols=None, scale_pos_weight=4.83, label=""):
+                cat_cols=None, scale_pos_weight=4.83, label="", cbsa=True):
     """
     Train and evaluate an XGBoost classifier with SHAP explainability.
 
     Pass w_train for a weighted run; omit (or pass None) for unweighted.
     cat_cols: list of categorical column names requiring sentinel/int/category encoding.
     scale_pos_weight: ratio of negatives to positives in training data.
+    cbsa=False drops OMB13CBSA from the feature set (and cat_cols) before training.
     Prints AUC-ROC, classification report, top-20 feature importance, and SHAP plots.
     """
     header = f"XGBOOST {label}".strip() if label else "XGBOOST"
@@ -114,6 +128,12 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
 
     X_train_pd = X_train.to_pandas()
     X_test_pd  = X_test.to_pandas()
+
+    if not cbsa:
+        X_train_pd = X_train_pd.drop(columns=["OMB13CBSA"], errors="ignore")
+        X_test_pd  = X_test_pd.drop(columns=["OMB13CBSA"],  errors="ignore")
+        if cat_cols:
+            cat_cols = [c for c in cat_cols if c != "OMB13CBSA"]
 
     if cat_cols:
         # Polars → Pandas converts nullable int columns with NaN to float.

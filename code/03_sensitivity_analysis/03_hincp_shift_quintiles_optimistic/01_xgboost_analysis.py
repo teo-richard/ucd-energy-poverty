@@ -1,7 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
 from analysis_functions import load_model, run_shap, prepare_cat_cols
-import pickle
 import pandas as pd
 import polars as pl
 
@@ -12,23 +11,32 @@ CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
     "ACPRIMARY", "SUPP1HEAT", "FIREPLACE", "MULTIGEN", "SAMEHHLD",
 ]
 
+COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT"]
+TEMP_RENAME  = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
+
 # Quintile-specific HINCP multipliers (1 + percent increase)
 QUINTILE_SHIFTS = {1: 1.15, 2: 1.20, 3: 1.20, 4: 1.20, 5: 1.25}
 
 model_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
 
-with open("data/processed/current_climate/with_weights/01_03_00_no_cbsa_X_test.pkl", "rb") as f:
-    X_test_base_w = prepare_cat_cols(pickle.load(f).to_pandas(), CAT_COLS_NO_CBSA)
+# Load 2050 projected climate data (income shifts applied on top of this)
+data = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv").rename(TEMP_RENAME)
+raw_pd = data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas()
 
-# Assign income quintiles based on HINCP distribution in the test set
-quintiles = pd.qcut(X_test_base_w["HINCP"], q=5, labels=[1, 2, 3, 4, 5])
+cbsa = raw_pd["OMB13CBSA"].copy()  # keep for heterogeneity analysis
+X_proj_base = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[list(model_w.get_booster().feature_names)]
 
-# Apply quintile-specific shifts to a copy of the test set
-X_test_shifted = X_test_base_w.copy()
-X_test_shifted["HINCP"] = X_test_shifted["HINCP"].astype(float)
+# Assign income quintiles based on HINCP distribution in the projected dataset
+quintiles = pd.qcut(X_proj_base["HINCP"], q=5, labels=[1, 2, 3, 4, 5])
+
+# Apply quintile-specific shifts to a copy of the projected dataset
+X_proj_shifted = X_proj_base.copy()
+X_proj_shifted["HINCP"]     = X_proj_shifted["HINCP"].astype(float)
+X_proj_shifted["PERPOVLVL"] = X_proj_shifted["PERPOVLVL"].astype(float)
 for q, factor in QUINTILE_SHIFTS.items():
     mask = quintiles == q
-    X_test_shifted.loc[mask, "HINCP"] = X_test_shifted.loc[mask, "HINCP"] * factor
+    X_proj_shifted.loc[mask, "HINCP"]     = X_proj_shifted.loc[mask, "HINCP"]     * factor
+    X_proj_shifted.loc[mask, "PERPOVLVL"] = X_proj_shifted.loc[mask, "PERPOVLVL"] * factor
 
 # --- Per-quintile results ---
 print(f"\n\n{'=' * 60}")
@@ -38,14 +46,14 @@ print("=" * 60)
 rows = []
 for q, factor in QUINTILE_SHIFTS.items():
     mask = (quintiles == q).values
-    base_prob    = model_w.predict_proba(X_test_base_w[mask])[:, 1].mean()
-    shifted_prob = model_w.predict_proba(X_test_shifted[mask])[:, 1].mean()
+    base_prob    = model_w.predict_proba(X_proj_base[mask])[:, 1].mean()
+    shifted_prob = model_w.predict_proba(X_proj_shifted[mask])[:, 1].mean()
     rows.append({
-        "quintile":           q,
-        "hincp_shift_pct":    round((factor - 1) * 100, 1),
-        "n":                  int(mask.sum()),
-        "baseline_ep_prob":   round(float(base_prob),    4),
-        "shifted_ep_prob":    round(float(shifted_prob), 4),
+        "quintile":          q,
+        "hincp_shift_pct":   round((factor - 1) * 100, 1),
+        "n":                 int(mask.sum()),
+        "baseline_ep_prob":  round(float(base_prob),    4),
+        "shifted_ep_prob":   round(float(shifted_prob), 4),
     })
 
 per_quintile = pl.DataFrame(rows)
@@ -56,21 +64,19 @@ print(f"\n\n{'=' * 60}")
 print("OVERALL SUMMARY")
 print("=" * 60)
 
-baseline_overall = model_w.predict_proba(X_test_base_w)[:, 1].mean()
-shifted_overall  = model_w.predict_proba(X_test_shifted)[:, 1].mean()
-print(f"Baseline mean EP probability:   {baseline_overall:.4f}")
-print(f"Post-shift mean EP probability: {shifted_overall:.4f}")
+baseline_overall = model_w.predict_proba(X_proj_base)[:, 1].mean()
+shifted_overall  = model_w.predict_proba(X_proj_shifted)[:, 1].mean()
+print(f"2050 projected mean EP probability:              {baseline_overall:.4f}")
+print(f"2050 projected + income shifts mean EP prob:     {shifted_overall:.4f}")
 
-baseline_ep_rate = (model_w.predict_proba(X_test_base_w)[:, 1] > 0.5).mean()
-shifted_ep_rate  = (model_w.predict_proba(X_test_shifted)[:, 1] > 0.5).mean()
-print(f"Baseline EP rate (threshold 0.5): {baseline_ep_rate:.4f}")
-print(f"Shifted EP rate  (threshold 0.5): {shifted_ep_rate:.4f}")
+baseline_ep_rate = (model_w.predict_proba(X_proj_base)[:, 1] > 0.5).mean()
+shifted_ep_rate  = (model_w.predict_proba(X_proj_shifted)[:, 1] > 0.5).mean()
+print(f"2050 projected EP rate (threshold 0.5):          {baseline_ep_rate:.4f}")
+print(f"2050 projected + income shifts EP rate (t=0.5):  {shifted_ep_rate:.4f}")
 
 # --- SHAP on shifted dataset ---
-run_shap(model_w, X_test_shifted, name="sensitivity_hincp_quintiles_optimistic_xgboost",
-         label="HINCP quintile shifts (optimistic)")
+run_shap(model_w, X_proj_shifted, name="sensitivity_hincp_quintiles_optimistic_xgboost",
+         label="HINCP quintile shifts (optimistic) on 2050 projected climate")
 
-baseline_ep_rate = (model_w.predict_proba(X_test_base_w)[:, 1] > 0.5).mean()
-shifted_ep_rate  = (model_w.predict_proba(X_test_shifted)[:, 1] > 0.5).mean()
-print(f"Baseline EP rate (threshold 0.5): {baseline_ep_rate:.4f}")
-print(f"Shifted EP rate  (threshold 0.5): {shifted_ep_rate:.4f}")
+print(baseline_ep_rate)
+print(shifted_ep_rate)

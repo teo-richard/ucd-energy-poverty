@@ -1,7 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
 from analysis_functions import load_model, run_shap, prepare_cat_cols
-import pickle
 import polars as pl
 
 CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
@@ -11,19 +10,21 @@ CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
     "ACPRIMARY", "SUPP1HEAT", "FIREPLACE", "MULTIGEN", "SAMEHHLD",
 ]
 
+COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT"]
+TEMP_RENAME  = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
+
 FACTORS = {90: 0.90, 100: 1.00, 110: 1.10, 120: 1.20, 130: 1.30}
 
 model_w  = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
-model_nw = load_model("data/processed/models/current_climate_xgboost_no_cbsa_without_weights.pkl")
 
-# Load the current climate no-CBSA test splits
-with open("data/processed/current_climate/with_weights/01_03_00_no_cbsa_X_test.pkl", "rb") as f:
-    X_test_base_w = prepare_cat_cols(pickle.load(f).to_pandas(), CAT_COLS_NO_CBSA)
+# Load 2050 projected climate data (income shifts applied on top of this)
+data = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv").rename(TEMP_RENAME)
+raw_pd = data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas()
 
-with open("data/processed/current_climate/without_weights/01_03_00_no_cbsa_X_test_no_weight.pkl", "rb") as f:
-    X_test_base_nw = prepare_cat_cols(pickle.load(f).to_pandas(), CAT_COLS_NO_CBSA)
+cbsa = raw_pd["OMB13CBSA"].copy()  # keep for heterogeneity analysis
+X_proj_base = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[list(model_w.get_booster().feature_names)]
 
-# --- Vary HINCP in test set; model weights are fixed from current climate training ---
+# --- Vary HINCP simultaneously across all households ---
 results = []
 
 for key, factor in FACTORS.items():
@@ -32,12 +33,14 @@ for key, factor in FACTORS.items():
     print(f"HINCP FACTOR: ×{factor}  ({change:+d}% of baseline)")
     print("=" * 60)
 
-    X_test_scaled = X_test_base_w.copy()
-    X_test_scaled["HINCP"] = X_test_scaled["HINCP"] * factor
+    X_scaled = X_proj_base.copy()
+    X_scaled["HINCP"]     = X_scaled["HINCP"].astype(float)     * factor
+    X_scaled["PERPOVLVL"] = X_scaled["PERPOVLVL"].astype(float) * factor
 
-    run_shap(model_w, X_test_scaled, name=f"sensitivity_hincp_{key:03d}_xgboost", label=f"HINCP ×{factor}")
+    run_shap(model_w, X_scaled, name=f"sensitivity_hincp_{key:03d}_xgboost",
+             label=f"HINCP ×{factor} on 2050 projected climate")
 
-    mean_pred_prob = model_w.predict_proba(X_test_scaled)[:, 1].mean()
+    mean_pred_prob = model_w.predict_proba(X_scaled)[:, 1].mean()
     results.append({"factor": factor, "mean_predicted_ep_prob": round(float(mean_pred_prob), 4)})
     print(f"Mean predicted EP probability: {mean_pred_prob:.4f}")
 

@@ -7,7 +7,7 @@ from polars import col, lit, when
 #   I'll just drop the current climate vars and put in the projected climate vars
 #   This is because the AHS data is already cleaned but was cleaned after joining and I don't want to go refactor it
 
-ahs_with_noaa = pl.read_csv("data/processed/current_climate/01_02_05_basic_ready_for_trees_ahs_climate.csv")
+ahs_with_noaa = pl.read_csv("data/processed/current_climate/basic_ready_for_trees_ahs_climate.csv")
 proj_climate = pl.read_csv("data/interim/projected_climate/02_01_cmip6_loca2_tas_vars.csv")
 
 crosswalk_raw = pl.read_csv("data/external/crosswalks/cbsa2fipsxw_2023.csv")

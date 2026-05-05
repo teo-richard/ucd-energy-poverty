@@ -11,7 +11,7 @@ CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
     "ACPRIMARY", "SUPP1HEAT", "FIREPLACE", "MULTIGEN", "SAMEHHLD",
 ]
 
-COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT"]
+COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT", "CONTROL"]
 TEMP_RENAME  = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
 
 Q1_SHIFTS = [0.10, 0.20, 0.30, 0.50, 0.70, 1.00, 1.50, 2.00]

@@ -1,12 +1,16 @@
 import os
 import pickle
 import joblib
+import numpy as np
 import polars as pl
 import lightgbm as lgb
 import xgboost as xgb
 import pandas as pd
 import shap
 from sklearn.metrics import roc_auc_score, classification_report
+from sklearn.calibration import calibration_curve
+from sklearn.metrics import brier_score_loss
+from sklearn.model_selection import StratifiedKFold
 import matplotlib.pyplot as plt
 
 
@@ -111,8 +115,9 @@ def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label="", cbsa=
     return model, X_test_pd
 
 
+# scale_pos_weight true ratio is 4.83
 def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
-                cat_cols=None, scale_pos_weight=4.83, label="", cbsa=True):
+                cat_cols=None, scale_pos_weight=4.83, label="", cbsa=True, name=None):
     """
     Train and evaluate an XGBoost classifier with SHAP explainability.
 
@@ -120,7 +125,9 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     cat_cols: list of categorical column names requiring sentinel/int/category encoding.
     scale_pos_weight: ratio of negatives to positives in training data.
     cbsa=False drops OMB13CBSA from the feature set (and cat_cols) before training.
-    Prints AUC-ROC, classification report, top-20 feature importance, and SHAP plots.
+    name: if provided, runs 5-fold CV on the training set and saves a calibration plot
+          to tree_model_output/{name}_calibration.png before final training.
+    Prints AUC-ROC, classification report, and top-20 feature importance.
     """
     header = f"XGBOOST {label}".strip() if label else "XGBOOST"
     print(f"\n\nRUNNING {header}")
@@ -142,6 +149,31 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
         X_train_pd = prepare_cat_cols(X_train_pd, cat_cols)
         X_test_pd  = prepare_cat_cols(X_test_pd, cat_cols)
 
+    if name is not None:
+        y_tr_np = y_train.to_numpy() if hasattr(y_train, "to_numpy") else np.array(y_train)
+        w_np    = w_train.to_numpy() if w_train is not None and hasattr(w_train, "to_numpy") else w_train
+        oof_probs = np.zeros(len(y_tr_np))
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        for fold_tr_idx, fold_val_idx in skf.split(X_train_pd, y_tr_np):
+            X_fold_tr  = X_train_pd.iloc[fold_tr_idx]
+            X_fold_val = X_train_pd.iloc[fold_val_idx]
+            y_fold_tr  = y_tr_np[fold_tr_idx]
+            y_fold_val = y_tr_np[fold_val_idx]
+            fold_model = xgb.XGBClassifier(
+                enable_categorical=True, tree_method="hist",
+                n_estimators=1000, learning_rate=0.05, max_depth=6,
+                scale_pos_weight=scale_pos_weight, subsample=0.8, colsample_bytree=0.8,
+                random_state=42, n_jobs=-1, eval_metric="logloss", early_stopping_rounds=50, min_child_weight = 3
+            )
+            fold_kwargs = dict(eval_set=[(X_fold_val, y_fold_val)], verbose=False)
+            if w_np is not None:
+                fold_kwargs["sample_weight"] = w_np[fold_tr_idx]
+            fold_model.fit(X_fold_tr, y_fold_tr, **fold_kwargs)
+            oof_probs[fold_val_idx] = fold_model.predict_proba(X_fold_val)[:, 1]
+        cv_label = f"{label} (5-fold CV)" if label else "5-fold CV"
+        _save_calibration_plot(y_tr_np, oof_probs, name=name, label=cv_label)
+        print("*Calibration plot saved.\n\n")
+
     model = xgb.XGBClassifier(
         enable_categorical=True,
         tree_method="hist",
@@ -155,6 +187,7 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
         n_jobs=-1,
         eval_metric="logloss",
         early_stopping_rounds=50,
+        min_child_weight = 3
     )
 
     fit_kwargs = dict(
@@ -179,6 +212,31 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     print(importance.head(20))
 
     return model, X_test_pd
+
+
+def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10):
+    """Save a calibration (reliability) diagram from pre-computed probabilities."""
+    prob_true, prob_pred = calibration_curve(y_true, y_prob, n_bins=n_bins)
+    brier = brier_score_loss(y_true, y_prob)
+    header = f" — {label}" if label else ""
+    print(f"\n\nCALIBRATION{header}")
+    print(f"Brier score: {brier:.4f}")
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot([0, 1], [0, 1], "k--", label="Perfectly calibrated")
+    ax.plot(prob_pred, prob_true, marker="o", label="XGBoost")
+    ax.set_xlabel("Mean predicted probability")
+    ax.set_ylabel("Fraction of positives")
+    ax.set_title(f"Calibration Plot{header}\nBrier score: {brier:.4f}")
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(f"tree_model_output/{name}_calibration.png")
+    plt.close()
+
+
+def run_calibration_plot(model, X_test_pd, y_test, name, label="", n_bins=10):
+    y_true = y_test.to_numpy() if hasattr(y_test, "to_numpy") else y_test
+    y_prob = model.predict_proba(X_test_pd)[:, 1]
+    _save_calibration_plot(y_true, y_prob, name=name, label=label, n_bins=n_bins)
 
 
 def run_shap(model, X_test_pd, name, label="", max_samples=500): # Max samples=None one if you want the full dataset passed

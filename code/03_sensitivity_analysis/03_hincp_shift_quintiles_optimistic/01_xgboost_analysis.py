@@ -11,7 +11,7 @@ CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
     "ACPRIMARY", "SUPP1HEAT", "FIREPLACE", "MULTIGEN", "SAMEHHLD",
 ]
 
-COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT"]
+COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT", "CONTROL"]
 TEMP_RENAME  = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
 
 # Quintile-specific HINCP multipliers (1 + percent increase)

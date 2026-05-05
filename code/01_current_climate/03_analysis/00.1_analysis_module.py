@@ -5,7 +5,7 @@ import os
 
 
 def get_splits(data):
-    X = data.drop(["energy_poverty"])
+    X = data.drop(["energy_poverty", "CONTROL"]) # WEIGHT is dropped when created weight splits and nw splits
     y = data["energy_poverty"]
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -32,7 +32,7 @@ os.makedirs("data/processed/current_climate/with_weights",    exist_ok=True)
 os.makedirs("data/processed/current_climate/without_weights", exist_ok=True)
 
 # --- With CBSA ---
-ahs_climate = pl.read_csv("data/processed/current_climate/01_02_05_basic_ready_for_trees_ahs_climate.csv")
+ahs_climate = pl.read_csv("data/processed/current_climate/basic_ready_for_trees_ahs_climate.csv")
 ahs_climate_no_weights = ahs_climate.drop("WEIGHT")
 
 info_with_weights    = get_splits(ahs_climate)
@@ -48,7 +48,7 @@ for name, file in info_without_weights.items():
         pickle.dump(file, f)
 
 # --- Without CBSA ---
-ahs_no_cbsa = pl.read_csv("data/processed/current_climate/01_02_05_basic_ready_for_trees_ahs_climate_no_cbsa.csv")
+ahs_no_cbsa = pl.read_csv("data/processed/current_climate/basic_ready_for_trees_ahs_climate_no_cbsa.csv")
 ahs_no_cbsa_no_weights = ahs_no_cbsa.drop("WEIGHT")
 
 info_no_cbsa_with_weights    = get_splits(ahs_no_cbsa)

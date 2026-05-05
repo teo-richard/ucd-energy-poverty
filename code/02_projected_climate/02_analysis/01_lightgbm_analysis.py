@@ -4,7 +4,7 @@ from analysis_functions import load_model, run_shap
 import polars as pl
 
 YEARS = [2050]
-COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT"]
+COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT", "CONTROL"]
 TEMP_RENAME = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
 
 model_nc_w  = load_model("data/processed/models/current_climate_lightgbm_no_cbsa_with_weights.pkl")

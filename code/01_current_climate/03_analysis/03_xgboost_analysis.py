@@ -35,7 +35,11 @@ splits_nc, splits_nc_nw = load_splits(
     cbsa=False,
 )
 
-model_nc_w, X_test_nc_w = run_xgboost(**splits_nc, cat_cols=CAT_COLS, scale_pos_weight=4.83, label="WITH WEIGHTS — no CBSA", cbsa=False)
+model_nc_w, X_test_nc_w = run_xgboost(
+    **splits_nc, cat_cols=CAT_COLS, scale_pos_weight=4.83,
+    label="WITH WEIGHTS — no CBSA", cbsa=False,
+    name="current_climate_xgboost_no_cbsa",
+)
 run_shap(model_nc_w, X_test_nc_w, name="current_climate_xgboost_no_cbsa", label="WITH WEIGHTS — no CBSA")
 save_model(model_nc_w, "data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
 

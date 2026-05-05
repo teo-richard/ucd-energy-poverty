@@ -11,7 +11,7 @@ CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
 ]
 
 YEARS = [2050]
-COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT"]
+COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT", "CONTROL"]
 TEMP_RENAME = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
 
 model_nc_w  = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
@@ -28,9 +28,13 @@ for year in YEARS:
     cbsa = raw_pd["OMB13CBSA"].copy()
     X = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[list(model_nc_w.get_booster().feature_names)]
 
-    mean_w = model_nc_w.predict_proba(X)[:, 1].mean()
+    pred_probs_w = model_nc_w.predict_proba(X)[:, 1]
+    mean_w = pred_probs_w.mean()
     print(f"WITH WEIGHTS model    — mean predicted EP probability: {mean_w:.4f}")
     run_shap(model_nc_w, X, name=f"proj_climate_xgboost_{year}", label=f"WITH WEIGHTS — {year}")
+
+    out = pl.DataFrame({"CONTROL": data["CONTROL"], "pred_prob_xgb_w": pred_probs_w})
+    out.write_csv(f"tree_model_output/xgboost_{year}_with_weights.csv")
 
     # mean_nw = model_nc_nw.predict_proba(X)[:, 1].mean()
     # print(f"WITHOUT WEIGHTS model — mean predicted EP probability: {mean_nw:.4f}")

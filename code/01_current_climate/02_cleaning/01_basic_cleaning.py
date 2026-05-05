@@ -40,7 +40,7 @@ ahs_climate = (
     .filter(
         col("INTSTATUS") == "1"
     )
-    .drop("UTILAMT", "INTSTATUS", "ELECAMT", "GASAMT", "OILAMT", "TRASHAMT", "WATERAMT", "SPLITSAMP", "INTMONTH", "CONTROL")
+    .drop("UTILAMT", "INTSTATUS", "ELECAMT", "GASAMT", "OILAMT", "TRASHAMT", "WATERAMT", "SPLITSAMP", "INTMONTH")
 )
 
 # --- Drop low variance columns ---

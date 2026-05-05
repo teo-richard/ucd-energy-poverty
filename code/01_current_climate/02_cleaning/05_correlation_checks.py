@@ -3,7 +3,7 @@ import polars.selectors as cs
 from polars import col, lit, when
 import pandas as pd
 
-ahs_climate = pl.read_csv("data/interim/current_climate/01_02_01_basic_clean_ahs_climate.csv")
+ahs_climate = pl.read_csv("data/interim/current_climate/01_02_04_features_engineered_ahs_climate.csv")
 
 sum(ahs_climate["energy_poverty"] == 1) / ahs_climate.height
 
@@ -40,7 +40,7 @@ print("\nRan script successfully.")
 print(f"Data shape: {ahs_climate.shape}")
 
 # --- Write the data ---
-csv_string = "data/interim/current_climate/01_02_02_data_checked_ahs_climate.csv"
+csv_string = "data/interim/current_climate/01_02_05_corr_checked_ahs_climate.csv"
 print(f"\nWriting data to {csv_string} now...")
 ahs_climate.write_csv(csv_string)
 

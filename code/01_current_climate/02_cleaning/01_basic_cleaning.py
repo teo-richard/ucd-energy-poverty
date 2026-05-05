@@ -55,9 +55,9 @@ low_var_cols = [
 ahs_climate = (
     ahs_climate
     .drop(low_var_cols)
-    .with_columns(cs.string().replace(["-6", "-7", "-8", "-9"], None)) # String columns
+    .with_columns(cs.string().replace(["-6", "-7", "-8", "-9", "999"], None)) # String columns
     .with_columns(
-        when(cs.numeric().is_in([-6, -7, -8, -9]))
+        when(cs.numeric().is_in([-6, -7, -8, -9, 999]))
         .then(None)
         .otherwise(cs.numeric())
         .name.keep()

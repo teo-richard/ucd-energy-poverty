@@ -39,9 +39,9 @@ for shift in Q1_SHIFTS:
     factor = 1 + shift
     X_shifted = X_proj_base.copy()
     X_shifted["HINCP"]     = X_shifted["HINCP"].astype(float)
-    X_shifted["PERPOVLVL"] = X_shifted["PERPOVLVL"].astype(float)
-    X_shifted.loc[q1_mask, "HINCP"]     = X_shifted.loc[q1_mask, "HINCP"]     * factor
-    X_shifted.loc[q1_mask, "PERPOVLVL"] = X_shifted.loc[q1_mask, "PERPOVLVL"] * factor
+    X_shifted["constr_PERPOVLVL"] = X_shifted["constr_PERPOVLVL"].astype(float)
+    X_shifted.loc[q1_mask, "HINCP"]          = X_shifted.loc[q1_mask, "HINCP"]          * factor
+    X_shifted.loc[q1_mask, "constr_PERPOVLVL"] = X_shifted.loc[q1_mask, "constr_PERPOVLVL"] * factor
 
     probs          = model_w.predict_proba(X_shifted)[:, 1]
     q1_ep_prob     = probs[q1_mask].mean()

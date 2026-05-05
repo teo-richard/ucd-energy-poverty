@@ -2,7 +2,7 @@ import polars as pl
 import polars.selectors as cs
 from polars import col, lit, when
 
-ahs_climate = pl.read_csv("data/interim/current_climate/05_ahs_excl.csv")
+ahs_climate = pl.read_csv("data/interim/current_climate/01_02_06_cat_collapsed_ahs_climate.csv")
 
 ahs_climate = ahs_climate.drop(["TOTHCAMT", "INSURAMT"])
 

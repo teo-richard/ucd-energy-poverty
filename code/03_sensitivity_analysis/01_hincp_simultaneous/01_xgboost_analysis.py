@@ -35,7 +35,7 @@ for key, factor in FACTORS.items():
 
     X_scaled = X_proj_base.copy()
     X_scaled["HINCP"]     = X_scaled["HINCP"].astype(float)     * factor
-    X_scaled["PERPOVLVL"] = X_scaled["PERPOVLVL"].astype(float) * factor
+    X_scaled["constr_PERPOVLVL"] = X_scaled["constr_PERPOVLVL"].astype(float) * factor
 
     run_shap(model_w, X_scaled, name=f"sensitivity_hincp_{key:03d}_xgboost",
              label=f"HINCP ×{factor} on 2050 projected climate")

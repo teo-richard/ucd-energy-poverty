@@ -6,11 +6,12 @@ project_root = script_dir.parents[2]
 
 scripts = [
     "01_basic_cleaning.py",
-    "02_correlation_checks.py",
-    "03_feature_engineering.py",
-    "04_collapse_categories.py",
-    "05_basic_exclusions.py",
-    "06_last_minute_cleanup.py",
+    "02_data_checks.py",
+    "03_basic_exclusions.py",
+    "04_feature_engineering.py",
+    "05_correlation_checks.py",
+    "06_collapse_categories.py",
+    "07_last_minute_cleanup.py",
 ]
 
 for script in scripts:

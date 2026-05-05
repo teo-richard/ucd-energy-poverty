@@ -32,11 +32,11 @@ quintiles = pd.qcut(X_proj_base["HINCP"], q=5, labels=[1, 2, 3, 4, 5])
 # Apply quintile-specific shifts to a copy of the projected dataset
 X_proj_shifted = X_proj_base.copy()
 X_proj_shifted["HINCP"]     = X_proj_shifted["HINCP"].astype(float)
-X_proj_shifted["PERPOVLVL"] = X_proj_shifted["PERPOVLVL"].astype(float)
+X_proj_shifted["constr_PERPOVLVL"] = X_proj_shifted["constr_PERPOVLVL"].astype(float)
 for q, factor in QUINTILE_SHIFTS.items():
     mask = quintiles == q
-    X_proj_shifted.loc[mask, "HINCP"]     = X_proj_shifted.loc[mask, "HINCP"]     * factor
-    X_proj_shifted.loc[mask, "PERPOVLVL"] = X_proj_shifted.loc[mask, "PERPOVLVL"] * factor
+    X_proj_shifted.loc[mask, "HINCP"]          = X_proj_shifted.loc[mask, "HINCP"]          * factor
+    X_proj_shifted.loc[mask, "constr_PERPOVLVL"] = X_proj_shifted.loc[mask, "constr_PERPOVLVL"] * factor
 
 # --- Per-quintile results ---
 print(f"\n\n{'=' * 60}")

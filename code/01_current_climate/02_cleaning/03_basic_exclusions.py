@@ -3,7 +3,7 @@ import polars.selectors as cs
 from polars import col, lit, when
 import pandas as pd
 
-ahs_climate_raw = pl.read_csv("data/interim/current_climate/01_02_04_cat_collapsed_ahs_climate.csv")
+ahs_climate_raw = pl.read_csv("data/interim/current_climate/01_02_01_basic_clean_ahs_climate.csv")
 
 ahs_climate_excl = (
     ahs_climate_raw
@@ -16,8 +16,11 @@ ahs_climate_excl = (
     .filter(col("HINCP") >= 4999) # Potential noise, exclude to be safe
     .filter(col("yearly_utils_cost") <= col("HINCP")) # Impossible
     .filter(col("HINCP") <= 848000) # implausible, high income
+    # other flags
+    .filter(~(col("TOTROOMS") < (col("BEDROOMS") + col("BATHROOMS")))) # sanity check
+    .filter(col("YRBUILT") < 2024) # sanity check
 )
 
 
 
-ahs_climate_excl.write_csv("data/interim/current_climate/05_ahs_excl.csv")
+ahs_climate_excl.write_csv("data/interim/current_climate/01_02_03_basic_excl_ahs_climate.csv")

@@ -18,8 +18,8 @@ ahs_climate_excl = (
     .filter(col("HINCP") <= 848000) # implausible, high income
     # issues with room variables
     .filter(~(col("TOTROOMS") < (col("BEDROOMS") + col("BATHROOMS")))) # total rooms can't be less than bedrooms plus bathrooms
-    .filter(col("FINROOMS") == 0)
-    .filter(col("BEDROOMS") == 0)
+    .filter(col("FINROOMS") != 0)
+    .filter(col("BEDROOMS") != 0)
     # other
     .filter(col("YRBUILT") < 2024) # sanity check
 

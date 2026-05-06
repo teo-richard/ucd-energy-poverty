@@ -16,9 +16,13 @@ ahs_climate_excl = (
     .filter(col("HINCP") >= 4999) # Potential noise, exclude to be safe
     .filter(col("yearly_utils_cost") <= col("HINCP")) # Impossible
     .filter(col("HINCP") <= 848000) # implausible, high income
-    # other flags
-    .filter(~(col("TOTROOMS") < (col("BEDROOMS") + col("BATHROOMS")))) # sanity check
+    # issues with room variables
+    .filter(~(col("TOTROOMS") < (col("BEDROOMS") + col("BATHROOMS")))) # total rooms can't be less than bedrooms plus bathrooms
+    .filter(col("FINROOMS") == 0)
+    .filter(col("BEDROOMS") == 0)
+    # other
     .filter(col("YRBUILT") < 2024) # sanity check
+
 )
 
 

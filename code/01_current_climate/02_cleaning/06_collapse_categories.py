@@ -141,6 +141,15 @@ HHRACE_map = {
     -6: 999, # not applicable
 }
 
+MULTIGEN_map = {
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5, 
+    6: 5
+}
+
 # anything not in the map gets 999
 
 var_maps = {
@@ -148,7 +157,8 @@ var_maps = {
     "SUPP1HEAT": SUPP1HEAT_map,
     "HEATTYPE": HEATTYPE_map,
     "BLD": BLD_map,
-    "HHRACE": HHRACE_map
+    "HHRACE": HHRACE_map,
+    "MULTIGEN": MULTIGEN_map
 }
 
 # ---------- Collapsing Automatically ----------

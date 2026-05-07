@@ -32,7 +32,10 @@ def prepare_cat_cols(X_pd, cat_cols):
     return X
 
 
-def load_splits(processed_dir, prefix, cbsa=True):
+ALL_TEMP_VARS = ["maxtemp", "mintemp", "avgtemp", "dtr", "HDD_approx", "CDD_approx"]
+
+
+def load_splits(processed_dir, prefix, cbsa=True, temp_vars=None):
     """
     Load weighted and unweighted train/test split pickles.
 
@@ -41,6 +44,8 @@ def load_splits(processed_dir, prefix, cbsa=True):
       {processed_dir}/without_weights/{prefix}_{name}_no_weight.pkl
 
     cbsa=False drops OMB13CBSA from X_train and X_test after loading.
+    temp_vars: list of temperature variables to keep (subset of ALL_TEMP_VARS).
+               All other temp vars are dropped. Pass None to keep all.
 
     Returns (splits_weighted, splits_unweighted) as dicts with keys
     X_train, X_test, y_train, y_test (and w_train for the weighted dict).
@@ -62,6 +67,16 @@ def load_splits(processed_dir, prefix, cbsa=True):
             for key in ["X_train", "X_test"]:
                 if key in splits and "OMB13CBSA" in splits[key].columns:
                     splits[key] = splits[key].drop("OMB13CBSA")
+
+    if temp_vars is not None:
+        to_drop = [v for v in ALL_TEMP_VARS if v not in temp_vars]
+        for splits in [splits_weighted, splits_unweighted]:
+            for key in ["X_train", "X_test"]:
+                if key in splits:
+                    cols = list(splits[key].columns)
+                    drop = [c for c in to_drop if c in cols]
+                    if drop:
+                        splits[key] = splits[key].drop(drop)
 
     return splits_weighted, splits_unweighted
 
@@ -153,6 +168,7 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
         y_tr_np = y_train.to_numpy() if hasattr(y_train, "to_numpy") else np.array(y_train)
         w_np    = w_train.to_numpy() if w_train is not None and hasattr(w_train, "to_numpy") else w_train
         oof_probs = np.zeros(len(y_tr_np))
+        fold_data = []
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         for fold_tr_idx, fold_val_idx in skf.split(X_train_pd, y_tr_np):
             X_fold_tr  = X_train_pd.iloc[fold_tr_idx]
@@ -169,16 +185,18 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
             if w_np is not None:
                 fold_kwargs["sample_weight"] = w_np[fold_tr_idx]
             fold_model.fit(X_fold_tr, y_fold_tr, **fold_kwargs)
-            oof_probs[fold_val_idx] = fold_model.predict_proba(X_fold_val)[:, 1]
+            fold_probs = fold_model.predict_proba(X_fold_val)[:, 1]
+            oof_probs[fold_val_idx] = fold_probs
+            fold_data.append((y_fold_val, fold_probs))
         cv_label = f"{label} (5-fold CV)" if label else "5-fold CV"
-        _save_calibration_plot(y_tr_np, oof_probs, name=name, label=cv_label)
+        _save_calibration_plot(y_tr_np, oof_probs, name=name, label=cv_label, fold_data=fold_data)
         print("*Calibration plot saved.\n\n")
 
     model = xgb.XGBClassifier(
         enable_categorical=True,
         tree_method="hist",
         n_estimators=1000,
-        learning_rate=0.05,
+        learning_rate=0.02,
         max_depth=6,
         scale_pos_weight=scale_pos_weight,
         subsample=0.8,
@@ -214,22 +232,71 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     return model, X_test_pd
 
 
-def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10):
+def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="quantile", fold_data=None):
     """Save a calibration (reliability) diagram from pre-computed probabilities."""
-    prob_true, prob_pred = calibration_curve(y_true, y_prob, n_bins=n_bins)
+    prob_true, prob_pred = calibration_curve(y_true, y_prob, n_bins=n_bins, strategy=strategy)
+
+    # Bin counts for ECE and per-point annotations — filter empty bins to match
+    # what calibration_curve returns (it drops empty bins from both arrays).
+    if strategy == "quantile":
+        bin_edges = np.quantile(y_prob, np.linspace(0, 1, n_bins + 1))
+        bin_edges = np.unique(bin_edges)
+    else:
+        bin_edges = np.linspace(0, 1, n_bins + 1)
+    counts_all, _ = np.histogram(y_prob, bins=bin_edges)
+    counts = counts_all[counts_all > 0][: len(prob_pred)]
+
     brier = brier_score_loss(y_true, y_prob)
+    ece = float(np.sum(np.abs(prob_true - prob_pred) * counts / counts.sum()))
+
     header = f" — {label}" if label else ""
     print(f"\n\nCALIBRATION{header}")
-    print(f"Brier score: {brier:.4f}")
+    print(f"Brier score: {brier:.4f}  ECE: {ece:.4f}")
+
     fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Per-fold curves in the background to show fold-to-fold variability
+    if fold_data:
+        for y_true_fold, y_prob_fold in fold_data:
+            try:
+                pt, pp = calibration_curve(y_true_fold, y_prob_fold, n_bins=n_bins, strategy=strategy)
+                ax.plot(pp, pt, color="steelblue", alpha=0.2, linewidth=1)
+            except ValueError:
+                pass
+
+    # Histogram of predicted probabilities on a secondary y-axis (pushed to bottom)
+    ax2 = ax.twinx()
+    hist_vals, _, _ = ax2.hist(y_prob, bins=30, alpha=0.15, color="steelblue", zorder=0)
+    ax2.set_ylim(0, hist_vals.max() * 5)
+    ax2.set_ylabel("Prediction count", color="steelblue", alpha=0.7, fontsize=9)
+    ax2.tick_params(axis="y", labelcolor="steelblue", labelsize=8)
+
+    # Keep calibration curve on top of histogram
+    ax.set_zorder(ax2.get_zorder() + 1)
+    ax.patch.set_visible(False)
+
+    # Perfect calibration reference line
     ax.plot([0, 1], [0, 1], "k--", label="Perfectly calibrated")
-    ax.plot(prob_pred, prob_true, marker="o", label="XGBoost")
+
+    # Aggregate calibration curve with per-bin sample-count annotations
+    ax.plot(prob_pred, prob_true, marker="o", color="steelblue", linewidth=2, label="XGBoost (aggregate)")
+    for x, y_pt, n in zip(prob_pred, prob_true, counts):
+        ax.annotate(f"n={n:,}", (x, y_pt), textcoords="offset points", xytext=(5, 5),
+                    fontsize=7, color="gray")
+
     ax.set_xlabel("Mean predicted probability")
     ax.set_ylabel("Fraction of positives")
-    ax.set_title(f"Calibration Plot{header}\nBrier score: {brier:.4f}")
-    ax.legend()
+    ax.set_title(f"Calibration Plot{header}")
+    ax.legend(loc="upper left", fontsize=9)
+
+    # Metrics in a tidy annotation box (bottom-right)
+    metrics_text = f"Brier: {brier:.4f}\nECE:   {ece:.4f}"
+    ax.text(0.98, 0.02, metrics_text, transform=ax.transAxes,
+            fontsize=9, va="bottom", ha="right", family="monospace",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="lightgray", alpha=0.9))
+
     plt.tight_layout()
-    plt.savefig(f"tree_model_output/{name}_calibration.png")
+    plt.savefig(f"tree_model_output/{name}_calibration.png", dpi=150)
     plt.close()
 
 

@@ -33,6 +33,7 @@ splits_nc, splits_nc_nw = load_splits(
     "data/processed/current_climate",
     "01_03_00",
     cbsa=False,
+    temp_vars = ["avgtemp"]
 )
 
 model_nc_w, X_test_nc_w = run_xgboost(

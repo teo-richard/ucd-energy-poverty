@@ -68,7 +68,7 @@ ahs_climate.null_count()
 
 
 # --- Drop columns with too many null values ---
-null_threshold = 0.2
+null_threshold = 0.1
 too_many_nulls = [
     c for c in ahs_climate.columns if ahs_climate[c].null_count()
     / ahs_climate.height > null_threshold

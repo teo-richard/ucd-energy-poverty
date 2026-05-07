@@ -26,7 +26,7 @@ with pl.Config(tbl_rows=-1):
 # --- Dropping variables that are measuring the same thing ---
 # See project_notes.md for information
 
-variables_to_drop = ["NUMPEOPLE", "FINCP", "NUMYNGKIDS"] 
+variables_to_drop = ["NUMPEOPLE", "FINCP", "NUMYNGKIDS"]
 
 
 ahs_climate = (

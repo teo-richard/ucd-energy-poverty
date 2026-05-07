@@ -178,6 +178,13 @@ print(
 )
 
 
+# --- Features: DTR, HDD_approx, CDD_approx ---
+ahs_climate = ahs_climate.with_columns([
+    (pl.col("maxtemp") - pl.col("mintemp")).alias("dtr"),
+    ((65 - pl.col("avgtemp")).clip(lower_bound=0) * 365).alias("HDD_approx"),
+    ((pl.col("avgtemp") - 65).clip(lower_bound=0) * 365).alias("CDD_approx"),
+])
+
 # ---------- Drop source variables ----------
 ahs_climate = ahs_climate.drop(
     ("HHFNTVTY", "HHMNTVTY", "HHNATVTY", "poverty_threshold_2023", "PERPOVLVL")

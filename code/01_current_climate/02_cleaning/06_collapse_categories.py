@@ -7,7 +7,7 @@ var_summary = pl.read_csv("data/internal/nominal_variable_summary.csv")
 
 # --- Get baseline pct energy poor ---
 print("\nBaseline Percent Energy Poor:")
-print(sum(ahs_climate["energy_poverty"] == 1) / ahs_climate.height )
+print(sum(ahs_climate["energy_deprivation"] == 1) / ahs_climate.height )
 print("\n")
 
 # Baseline is 17.16 percent energy poor

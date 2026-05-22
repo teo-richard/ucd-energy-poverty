@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_model, run_shap, prepare_cat_cols
+from analysis_functions import load_model, run_shap, prepare_cat_cols, filter_temp_vars
 import polars as pl
 
 CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
@@ -10,8 +10,11 @@ CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
     "ACPRIMARY", "SUPP1HEAT", "FIREPLACE", "MULTIGEN", "SAMEHHLD",
 ]
 
-COLS_TO_DROP = ["energy_poverty", "year", "WEIGHT", "CONTROL"]
-TEMP_RENAME  = {"proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp"}
+COLS_TO_DROP = ["energy_deprivation", "year", "WEIGHT", "CONTROL"]
+TEMP_RENAME = {
+    "proj_tasmin": "mintemp", "proj_tasmax": "maxtemp", "proj_tas": "avgtemp",
+    "proj_dtr": "dtr", "proj_HDD_approx": "HDD_approx", "proj_CDD_approx": "CDD_approx",
+}
 
 FACTORS = {90: 0.90, 100: 1.00, 110: 1.10, 120: 1.20, 130: 1.30}
 
@@ -19,7 +22,7 @@ model_w  = load_model("data/processed/models/current_climate_xgboost_no_cbsa_wit
 
 # Load 2050 projected climate data (income shifts applied on top of this)
 data = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv").rename(TEMP_RENAME)
-raw_pd = data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas()
+raw_pd = filter_temp_vars(data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas())
 
 cbsa = raw_pd["OMB13CBSA"].copy()  # keep for heterogeneity analysis
 X_proj_base = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[list(model_w.get_booster().feature_names)]

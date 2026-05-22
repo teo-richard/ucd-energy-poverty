@@ -5,9 +5,7 @@ from polars import col, lit, when
 ahs_climate = pl.read_csv("data/interim/current_climate/01_02_06_cat_collapsed_ahs_climate.csv")
 
 ahs_climate = ahs_climate.drop(["TOTHCAMT", "INSURAMT"])
-
-# Drop yearly utils cost because it will cause data leakage (mechanically related to energy poverty)
-ahs_climate = ahs_climate.drop("yearly_utils_cost")
+ahs_climate = ahs_climate.drop(["HOT", "COLD"])  # leakage: energy_deprivation = 1[HOT==1 or COLD==1]
 
 
 # --------------------------------------------------------------------------------

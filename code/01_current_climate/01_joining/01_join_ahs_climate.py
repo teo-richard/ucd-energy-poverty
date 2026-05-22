@@ -15,19 +15,14 @@ crosswalk = (
 household_raw = pl.read_csv("data/raw/AHS 2023 National PUF v1.1 CSV/household.csv")
 
 
-yearly_utils_cost = household_raw["UTILAMT"] * 12
-# Yearly income is HINCP
-
 household = (
     household_raw
-    .with_columns(yearly_utils_cost.alias("yearly_utils_cost"))
-)
-
-household = household.with_columns(
-    when(col("yearly_utils_cost") > 0.1 * col("HINCP"))
-    .then(1)
-    .otherwise(0)
-    .alias("energy_poverty")
+    .with_columns(
+        when((col("HOT") == "'1'") | (col("COLD") == "'1'"))
+        .then(1)
+        .otherwise(0)
+        .alias("energy_deprivation")
+    )
 )
 
 

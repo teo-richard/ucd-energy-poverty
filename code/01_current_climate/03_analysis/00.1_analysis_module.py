@@ -5,8 +5,8 @@ import os
 
 
 def get_splits(data):
-    X = data.drop(["energy_poverty", "CONTROL"]) # WEIGHT is dropped when created weight splits and nw splits
-    y = data["energy_poverty"]
+    X = data.drop(["energy_deprivation", "CONTROL"]) # WEIGHT is dropped when created weight splits and nw splits
+    y = data["energy_deprivation"]
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y

@@ -40,7 +40,7 @@ ahs_climate = (
     .filter(
         col("INTSTATUS") == "1"
     )
-    .drop("UTILAMT", "INTSTATUS", "ELECAMT", "GASAMT", "OILAMT", "TRASHAMT", "WATERAMT", "SPLITSAMP", "INTMONTH")
+    .drop("INTSTATUS", "ELECAMT", "GASAMT", "OILAMT", "TRASHAMT", "WATERAMT", "SPLITSAMP", "INTMONTH")
 )
 
 # --- Drop low variance columns ---
@@ -88,13 +88,12 @@ ahs_climate = ahs_climate.drop(only_2023)
 #print(ahs_climate.height) # 26700
 ahs_climate = (
     ahs_climate
-    .filter(col("energy_poverty").is_not_null())
+    .filter(col("energy_deprivation").is_not_null())
 )
 #print(ahs_climate.height) #26700, so no rows removed
 
-print("Energy Poverty variable: \n")
-print(ahs_climate.select(col("energy_poverty").value_counts(sort=True)))
-# About 17% are in energy poverty by my definition (4581 in EP, 22119 not in EP)
+print("Energy Deprivation variable: \n")
+print(ahs_climate.select(col("energy_deprivation").value_counts(sort=True)))
 
 
 # --- Turn columns to numeric to make them easier to work with in the future ---

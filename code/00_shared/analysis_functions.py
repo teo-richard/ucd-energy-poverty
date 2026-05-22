@@ -33,6 +33,15 @@ def prepare_cat_cols(X_pd, cat_cols):
 
 
 ALL_TEMP_VARS = ["maxtemp", "mintemp", "avgtemp", "dtr", "HDD_approx", "CDD_approx"]
+TEMP_VARS = ["avgtemp"]  # ← edit this one list to change temp vars used across all analyses
+
+
+def filter_temp_vars(df_pd, temp_vars=None):
+    """Drop all ALL_TEMP_VARS columns not in temp_vars from a pandas DataFrame."""
+    if temp_vars is None:
+        temp_vars = TEMP_VARS
+    to_drop = [v for v in ALL_TEMP_VARS if v not in temp_vars and v in df_pd.columns]
+    return df_pd.drop(columns=to_drop) if to_drop else df_pd
 
 
 def load_splits(processed_dir, prefix, cbsa=True, temp_vars=None):
@@ -130,9 +139,9 @@ def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label="", cbsa=
     return model, X_test_pd
 
 
-# scale_pos_weight true ratio is 4.83
+# scale_pos_weight: recompute as (n_negative / n_positive) after pipeline runs with energy_deprivation
 def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
-                cat_cols=None, scale_pos_weight=4.83, label="", cbsa=True, name=None):
+                cat_cols=None, scale_pos_weight=4.713795960346256, label="", cbsa=True, name=None):
     """
     Train and evaluate an XGBoost classifier with SHAP explainability.
 
@@ -232,7 +241,7 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     return model, X_test_pd
 
 
-def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="quantile", fold_data=None):
+def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="quantile", fold_data=None, model_name="XGBoost"):
     """Save a calibration (reliability) diagram from pre-computed probabilities."""
     prob_true, prob_pred = calibration_curve(y_true, y_prob, n_bins=n_bins, strategy=strategy)
 
@@ -279,7 +288,7 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
     ax.plot([0, 1], [0, 1], "k--", label="Perfectly calibrated")
 
     # Aggregate calibration curve with per-bin sample-count annotations
-    ax.plot(prob_pred, prob_true, marker="o", color="steelblue", linewidth=2, label="XGBoost (aggregate)")
+    ax.plot(prob_pred, prob_true, marker="o", color="steelblue", linewidth=2, label=f"{model_name} (aggregate)")
     for x, y_pt, n in zip(prob_pred, prob_true, counts):
         ax.annotate(f"n={n:,}", (x, y_pt), textcoords="offset points", xytext=(5, 5),
                     fontsize=7, color="gray")

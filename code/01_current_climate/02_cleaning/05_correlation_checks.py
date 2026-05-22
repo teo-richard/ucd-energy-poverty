@@ -5,7 +5,7 @@ import pandas as pd
 
 ahs_climate = pl.read_csv("data/interim/current_climate/01_02_04_features_engineered_ahs_climate.csv")
 
-sum(ahs_climate["energy_poverty"] == 1) / ahs_climate.height
+sum(ahs_climate["energy_deprivation"] == 1) / ahs_climate.height
 
 corr = ahs_climate.to_pandas().corr()
 

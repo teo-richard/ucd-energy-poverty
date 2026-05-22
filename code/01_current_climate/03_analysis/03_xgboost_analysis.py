@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_splits, run_xgboost, run_shap, save_model
+from analysis_functions import load_splits, run_xgboost, run_shap, save_model, TEMP_VARS
 
 
 CAT_COLS = [  # Does not include SEWTYPE and ASECONDRY because we dropped those
@@ -33,7 +33,7 @@ splits_nc, splits_nc_nw = load_splits(
     "data/processed/current_climate",
     "01_03_00",
     cbsa=False,
-    temp_vars = ["avgtemp"]
+    temp_vars=TEMP_VARS
 )
 
 model_nc_w, X_test_nc_w = run_xgboost(

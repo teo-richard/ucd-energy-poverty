@@ -21,7 +21,7 @@ crosswalk = (
 )
 
 
-ahs_no_noaa = ahs_with_noaa.drop("mintemp", "maxtemp", "avgtemp")
+ahs_no_noaa = ahs_with_noaa.drop("mintemp", "maxtemp", "avgtemp", "dtr", "HDD_approx", "CDD_approx")
 
 # Join county-level CMIP6 data to crosswalk to get CBSA codes
 proj_climate_with_cbsa = proj_climate.join(
@@ -39,6 +39,11 @@ proj_climate_cbsa = (
         pl.col("tasmax").mean().alias("proj_tasmax"),
         pl.col("tas").mean().alias("proj_tas"),
     )
+    .with_columns([
+        (pl.col("proj_tasmax") - pl.col("proj_tasmin")).alias("proj_dtr"),
+        ((65 - pl.col("proj_tas")).clip(lower_bound=0) * 365).alias("proj_HDD_approx"),
+        ((pl.col("proj_tas") - 65).clip(lower_bound=0) * 365).alias("proj_CDD_approx"),
+    ])
 )
 
 # --- Joining the years I want ---

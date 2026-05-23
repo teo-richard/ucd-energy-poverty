@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars
+from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars, get_feature_names
 import pandas as pd
 import polars as pl
 
@@ -19,14 +19,14 @@ TEMP_RENAME = {
 
 Q1_SHIFTS = [0.10, 0.20, 0.30, 0.50, 0.70, 1.00, 1.50, 2.00]
 
-model_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
+model_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl")
 
 # Load 2050 projected climate data
 data = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv").rename(TEMP_RENAME)
 raw_pd = filter_temp_vars(data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas())
 
 cbsa = raw_pd["OMB13CBSA"].copy()  # keep for heterogeneity analysis
-X_proj_base = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[list(model_w.get_booster().feature_names)]
+X_proj_base = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[get_feature_names(model_w)]
 
 quintiles = pd.qcut(X_proj_base["HINCP"], q=5, labels=[1, 2, 3, 4, 5])
 q1_mask = (quintiles == 1).values

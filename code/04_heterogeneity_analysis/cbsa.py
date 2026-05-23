@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars
+from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars, get_feature_names
 import polars as pl
 
 CAT_COLS_NO_CBSA = [
@@ -15,8 +15,8 @@ TEMP_RENAME = {
     "proj_dtr": "dtr", "proj_HDD_approx": "HDD_approx", "proj_CDD_approx": "CDD_approx",
 }
 
-model = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
-feature_names = list(model.get_booster().feature_names)
+model = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl")
+feature_names = get_feature_names(model)
 
 # 2050 predictions (pre-computed)
 proj_clim_2050 = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv")

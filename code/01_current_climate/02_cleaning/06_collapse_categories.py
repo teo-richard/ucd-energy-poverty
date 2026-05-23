@@ -158,7 +158,7 @@ var_maps = {
     "HEATTYPE": HEATTYPE_map,
     "BLD": BLD_map,
     "HHRACE": HHRACE_map,
-    "MULTIGEN": MULTIGEN_map
+    "MULTIGEN": MULTIGEN_map,
 }
 
 # ---------- Collapsing Automatically ----------

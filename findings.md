@@ -1,11 +1,15 @@
 **XGBoost Vs. Logistic Regression**
 XGBoost outperforms Logistic Regression:
 
-XGBoost: Brier =
+XGBoost: 
+- Brier = 0.148, ECE = 0.1119
+- After Platt Scaling: Brier = 0.1291, ECE = 0.0151
 
-Logistic Regression: Brier = 
+AUC-ROC = 0.7253
+Precision
 
-Calibration curve for XGBoost is much better but still underestimates even with binning.
+Most important features: WALLCRACK, ACPRIMARY, FUSEBLOW, ROACH, DISHH
+
 
 **Climate Change**
 Biggest finding: Climate is not a meaningful driver of energy poverty. 

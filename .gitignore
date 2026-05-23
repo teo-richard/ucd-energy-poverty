@@ -16,6 +16,7 @@ data/
 to-dos/
 .claude/
 notes/
+findings.md
 
 # Temporary
 999_check_high_lev.py

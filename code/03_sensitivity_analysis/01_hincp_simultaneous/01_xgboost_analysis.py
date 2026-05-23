@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_model, run_shap, prepare_cat_cols, filter_temp_vars
+from analysis_functions import load_model, run_shap, prepare_cat_cols, filter_temp_vars, get_feature_names
 import polars as pl
 
 CAT_COLS_NO_CBSA = [  # Does not include SEWTYPE, ASECONDRY, or OMB13CBSA
@@ -18,14 +18,15 @@ TEMP_RENAME = {
 
 FACTORS = {90: 0.90, 100: 1.00, 110: 1.10, 120: 1.20, 130: 1.30}
 
-model_w  = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
+raw_model_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
+cal_model_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl")
 
 # Load 2050 projected climate data (income shifts applied on top of this)
 data = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv").rename(TEMP_RENAME)
 raw_pd = filter_temp_vars(data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas())
 
 cbsa = raw_pd["OMB13CBSA"].copy()  # keep for heterogeneity analysis
-X_proj_base = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[list(model_w.get_booster().feature_names)]
+X_proj_base = prepare_cat_cols(raw_pd, CAT_COLS_NO_CBSA)[get_feature_names(cal_model_w)]
 
 # --- Vary HINCP simultaneously across all households ---
 results = []
@@ -40,10 +41,10 @@ for key, factor in FACTORS.items():
     X_scaled["HINCP"]     = X_scaled["HINCP"].astype(float)     * factor
     X_scaled["constr_PERPOVLVL"] = X_scaled["constr_PERPOVLVL"].astype(float) * factor
 
-    run_shap(model_w, X_scaled, name=f"sensitivity_hincp_{key:03d}_xgboost",
+    run_shap(raw_model_w, X_scaled, name=f"sensitivity_hincp_{key:03d}_xgboost",
              label=f"HINCP ×{factor} on 2050 projected climate")
 
-    mean_pred_prob = model_w.predict_proba(X_scaled)[:, 1].mean()
+    mean_pred_prob = cal_model_w.predict_proba(X_scaled)[:, 1].mean()
     results.append({"factor": factor, "mean_predicted_ep_prob": round(float(mean_pred_prob), 4)})
     print(f"Mean predicted EP probability: {mean_pred_prob:.4f}")
 

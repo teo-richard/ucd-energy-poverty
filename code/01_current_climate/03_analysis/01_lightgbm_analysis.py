@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_splits, run_lightgbm, run_shap, save_model, TEMP_VARS
+from analysis_functions import load_splits, run_lightgbm, save_model, TEMP_VARS
 
 
 # --- With CBSA ---
@@ -27,8 +27,13 @@ splits_nc, splits_nc_nw = load_splits(
     temp_vars=TEMP_VARS
 )
 
-model_nc_w, X_test_nc_w = run_lightgbm(**splits_nc, label="WITH WEIGHTS — no CBSA", cbsa=False)
+model_nc_w, cal_nc_w, X_test_nc_w = run_lightgbm(
+    **{k: splits_nc[k] for k in ["X_train", "X_test", "y_train", "y_test", "w_train"]},
+    X_cal=splits_nc.get("X_cal"), y_cal=splits_nc.get("y_cal"), w_cal=splits_nc.get("w_cal"),
+    label="WITH WEIGHTS — no CBSA", cbsa=False,
+)
 save_model(model_nc_w, "data/processed/models/current_climate_lightgbm_no_cbsa_with_weights.pkl")
+save_model(cal_nc_w,  "data/processed/models/current_climate_lightgbm_no_cbsa_with_weights_calibrated.pkl")
 
 # model_nc_nw, X_test_nc_nw = run_lightgbm(
 #     **{k: splits_nc_nw[k] for k in ["X_train", "X_test", "y_train", "y_test"]},

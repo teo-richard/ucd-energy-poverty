@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars
+from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars, get_feature_names
 import numpy as np
 import pandas as pd
 import polars as pl
@@ -30,8 +30,8 @@ HEATTYPE_LABELS = {
 }
 HEATTYPE_VALUES = list(HEATTYPE_LABELS.keys())
 
-model_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
-feature_names = list(model_w.get_booster().feature_names)
+model_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl")
+feature_names = get_feature_names(model_w)
 
 data = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv").rename(TEMP_RENAME)
 raw_pd = filter_temp_vars(data.drop([c for c in COLS_TO_DROP if c in data.columns]).to_pandas())

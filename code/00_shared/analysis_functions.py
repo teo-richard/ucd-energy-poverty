@@ -9,6 +9,7 @@ import pandas as pd
 import shap
 from sklearn.metrics import roc_auc_score, classification_report
 from sklearn.calibration import calibration_curve
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
 from sklearn.model_selection import StratifiedKFold
 import matplotlib.pyplot as plt
@@ -60,27 +61,29 @@ def load_splits(processed_dir, prefix, cbsa=True, temp_vars=None):
     X_train, X_test, y_train, y_test (and w_train for the weighted dict).
     """
     splits_weighted = {}
-    for name in ["X_train", "X_test", "y_train", "y_test", "w_train"]:
+    for name in ["X_train", "X_cal", "X_test", "y_train", "y_cal", "y_test", "w_train", "w_cal"]:
         path = f"{processed_dir}/with_weights/{prefix}_{name}.pkl"
-        with open(path, "rb") as f:
-            splits_weighted[name] = pickle.load(f)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                splits_weighted[name] = pickle.load(f)
 
     splits_unweighted = {}
-    for name in ["X_train", "X_test", "y_train", "y_test"]:
+    for name in ["X_train", "X_cal", "X_test", "y_train", "y_cal", "y_test"]:
         path = f"{processed_dir}/without_weights/{prefix}_{name}_no_weight.pkl"
-        with open(path, "rb") as f:
-            splits_unweighted[name] = pickle.load(f)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                splits_unweighted[name] = pickle.load(f)
 
     if not cbsa:
         for splits in [splits_weighted, splits_unweighted]:
-            for key in ["X_train", "X_test"]:
+            for key in ["X_train", "X_cal", "X_test"]:
                 if key in splits and "OMB13CBSA" in splits[key].columns:
                     splits[key] = splits[key].drop("OMB13CBSA")
 
     if temp_vars is not None:
         to_drop = [v for v in ALL_TEMP_VARS if v not in temp_vars]
         for splits in [splits_weighted, splits_unweighted]:
-            for key in ["X_train", "X_test"]:
+            for key in ["X_train", "X_cal", "X_test"]:
                 if key in splits:
                     cols = list(splits[key].columns)
                     drop = [c for c in to_drop if c in cols]
@@ -90,13 +93,77 @@ def load_splits(processed_dir, prefix, cbsa=True, temp_vars=None):
     return splits_weighted, splits_unweighted
 
 
-def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label="", cbsa=True):
+class _PlattScaler:
+    """Post-hoc Platt scaling wrapper around a pre-fitted classifier.
+
+    Fits a logistic regression (the sigmoid A/B parameters) on a held-out
+    calibration set without re-training the base estimator. Provides the
+    same predict_proba / predict interface as the underlying model.
+    """
+
+    def __init__(self, raw_model):
+        self.estimator = raw_model  # kept for get_feature_names() compatibility
+        self._lr = None
+
+    def fit(self, X_cal_pd, y_cal_np, sample_weight=None):
+        raw_probs = self.estimator.predict_proba(X_cal_pd)[:, 1]
+        # Clamp to avoid log(0); logistic regression on log-odds is Platt scaling
+        raw_probs = np.clip(raw_probs, 1e-7, 1 - 1e-7)
+        logits = np.log(raw_probs / (1 - raw_probs)).reshape(-1, 1)
+        self._lr = LogisticRegression(C=1e10, random_state=42, max_iter=1000)
+        fit_kwargs = {}
+        if sample_weight is not None and len(sample_weight) > 0:
+            fit_kwargs["sample_weight"] = sample_weight
+        self._lr.fit(logits, y_cal_np, **fit_kwargs)
+        return self
+
+    def predict_proba(self, X):
+        raw_probs = self.estimator.predict_proba(X)[:, 1]
+        raw_probs = np.clip(raw_probs, 1e-7, 1 - 1e-7)
+        logits = np.log(raw_probs / (1 - raw_probs)).reshape(-1, 1)
+        return self._lr.predict_proba(logits)
+
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+
+def calibrate_model(raw_model, X_cal_pd, y_cal, w_cal=None):
+    """Fit Platt scaling on a held-out calibration set.
+
+    Fits only the sigmoid A/B logistic layer — the tree is not retrained.
+    Returns a _PlattScaler whose .predict_proba() gives calibrated probabilities.
+    """
+    y_cal_np = y_cal.to_numpy() if hasattr(y_cal, "to_numpy") else np.array(y_cal)
+    w_cal_np = w_cal.to_numpy() if w_cal is not None and hasattr(w_cal, "to_numpy") else w_cal
+
+    scaler = _PlattScaler(raw_model)
+    scaler.fit(X_cal_pd, y_cal_np, sample_weight=w_cal_np if w_cal_np is not None and len(w_cal_np) > 0 else None)
+    return scaler
+
+
+def get_feature_names(model):
+    """Return XGBoost feature names from a raw model or a CalibratedClassifierCV wrapper."""
+    if hasattr(model, "get_booster"):
+        return list(model.get_booster().feature_names)
+    if hasattr(model, "estimator") and hasattr(model.estimator, "get_booster"):
+        return list(model.estimator.get_booster().feature_names)
+    return None
+
+
+def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None,
+                 X_cal=None, y_cal=None, w_cal=None,
+                 label="", cbsa=True):
     """
     Train and evaluate a LightGBM classifier.
 
     Pass w_train for a weighted run; omit (or pass None) for unweighted.
     cbsa=False drops OMB13CBSA from the feature set before training.
+    X_cal/y_cal/w_cal: held-out calibration set for Platt scaling. If provided,
+    a CalibratedClassifierCV(method='sigmoid') is fit and returned as the second
+    element of the return tuple.
     Prints AUC-ROC, classification report, and top-20 feature importance.
+    Returns (raw_model, calibrated_model, X_test_pd). calibrated_model is None
+    if no calibration set is supplied.
     """
     header = f"LIGHTGBM {label}".strip() if label else "LIGHTGBM"
     print(f"\n\nRUNNING {header}")
@@ -104,7 +171,7 @@ def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label="", cbsa=
 
     model = lgb.LGBMClassifier(
         n_estimators=1000,
-        learning_rate=0.05,
+        learning_rate=0.02,
         num_leaves=31,
         class_weight="balanced",
         random_state=42,
@@ -136,12 +203,33 @@ def run_lightgbm(X_train, X_test, y_train, y_test, w_train=None, label="", cbsa=
     importance = pd.Series(model.feature_importances_, index=X_train_pd.columns)
     print(importance.sort_values(ascending=False).head(20))
 
-    return model, X_test_pd
+    calibrated_model = None
+    if X_cal is not None and y_cal is not None:
+        X_cal_pd = X_cal.to_pandas()
+        if not cbsa:
+            X_cal_pd = X_cal_pd.drop(columns=["OMB13CBSA"], errors="ignore")
+        calibrated_model = calibrate_model(model, X_cal_pd, y_cal, w_cal)
+        print("*Platt scaling calibrator fit on held-out calibration set.")
+
+        y_test_np = y_test.to_numpy() if hasattr(y_test, "to_numpy") else np.array(y_test)
+        y_prob_cal = calibrated_model.predict_proba(X_test_pd)[:, 1]
+        _save_calibration_plot(
+            y_test_np, y_pred_proba,
+            name=f"{label.replace(' ', '_').replace('—', '').strip()}_lgbm_pre_vs_post_cal" if label else "lgbm_pre_vs_post_cal",
+            label=f"{label} — test set" if label else "test set",
+            y_prob_cal=y_prob_cal,
+            model_name="LightGBM",
+        )
+        print("*Pre-vs-post calibration plot saved.\n\n")
+
+    return model, calibrated_model, X_test_pd
 
 
 # scale_pos_weight: recompute as (n_negative / n_positive) after pipeline runs with energy_deprivation
 def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
-                cat_cols=None, scale_pos_weight=4.713795960346256, label="", cbsa=True, name=None):
+                cat_cols=None, scale_pos_weight=4.713795960346256,
+                X_cal=None, y_cal=None, w_cal=None,
+                label="", cbsa=True, name=None):
     """
     Train and evaluate an XGBoost classifier with SHAP explainability.
 
@@ -151,7 +239,12 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     cbsa=False drops OMB13CBSA from the feature set (and cat_cols) before training.
     name: if provided, runs 5-fold CV on the training set and saves a calibration plot
           to tree_model_output/{name}_calibration.png before final training.
+    X_cal/y_cal/w_cal: held-out calibration set for Platt scaling. If provided,
+    a CalibratedClassifierCV(method='sigmoid') is fit and returned as the second
+    element of the return tuple.
     Prints AUC-ROC, classification report, and top-20 feature importance.
+    Returns (raw_model, calibrated_model, X_test_pd). calibrated_model is None
+    if no calibration set is supplied.
     """
     header = f"XGBOOST {label}".strip() if label else "XGBOOST"
     print(f"\n\nRUNNING {header}")
@@ -186,7 +279,7 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
             y_fold_val = y_tr_np[fold_val_idx]
             fold_model = xgb.XGBClassifier(
                 enable_categorical=True, tree_method="hist",
-                n_estimators=1000, learning_rate=0.05, max_depth=6,
+                n_estimators=1000, learning_rate=0.02, max_depth=6,
                 scale_pos_weight=scale_pos_weight, subsample=0.8, colsample_bytree=0.8,
                 random_state=42, n_jobs=-1, eval_metric="logloss", early_stopping_rounds=50, min_child_weight = 3
             )
@@ -238,11 +331,38 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     }).sort("importance", descending=True)
     print(importance.head(20))
 
-    return model, X_test_pd
+    calibrated_model = None
+    if X_cal is not None and y_cal is not None:
+        X_cal_pd = X_cal.to_pandas()
+        if not cbsa:
+            X_cal_pd = X_cal_pd.drop(columns=["OMB13CBSA"], errors="ignore")
+        if cat_cols:
+            effective_cat_cols = [c for c in cat_cols if c != "OMB13CBSA"] if not cbsa else cat_cols
+            X_cal_pd = prepare_cat_cols(X_cal_pd, effective_cat_cols)
+        calibrated_model = calibrate_model(model, X_cal_pd, y_cal, w_cal)
+        print("*Platt scaling calibrator fit on held-out calibration set.")
+
+        if name is not None:
+            y_test_np = y_test.to_numpy() if hasattr(y_test, "to_numpy") else np.array(y_test)
+            y_prob_cal = calibrated_model.predict_proba(X_test_pd)[:, 1]
+            _save_calibration_plot(
+                y_test_np, y_pred_proba,
+                name=f"{name}_pre_vs_post_cal",
+                label=f"{label} — test set" if label else "test set",
+                y_prob_cal=y_prob_cal,
+                model_name="XGBoost",
+            )
+            print("*Pre-vs-post calibration plot saved.\n\n")
+
+    return model, calibrated_model, X_test_pd
 
 
-def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="quantile", fold_data=None, model_name="XGBoost"):
-    """Save a calibration (reliability) diagram from pre-computed probabilities."""
+def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="quantile",
+                           fold_data=None, model_name="XGBoost", y_prob_cal=None, cal_label=None):
+    """Save a calibration (reliability) diagram from pre-computed probabilities.
+
+    y_prob_cal: optional Platt-scaled probabilities to overlay as a second curve.
+    """
     prob_true, prob_pred = calibration_curve(y_true, y_prob, n_bins=n_bins, strategy=strategy)
 
     # Bin counts for ECE and per-point annotations — filter empty bins to match
@@ -261,6 +381,21 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
     header = f" — {label}" if label else ""
     print(f"\n\nCALIBRATION{header}")
     print(f"Brier score: {brier:.4f}  ECE: {ece:.4f}")
+
+    # Compute post-calibration metrics if provided
+    brier_cal = ece_cal = prob_true_cal = prob_pred_cal = None
+    if y_prob_cal is not None:
+        prob_true_cal, prob_pred_cal = calibration_curve(y_true, y_prob_cal, n_bins=n_bins, strategy=strategy)
+        if strategy == "quantile":
+            cal_edges = np.quantile(y_prob_cal, np.linspace(0, 1, n_bins + 1))
+            cal_edges = np.unique(cal_edges)
+        else:
+            cal_edges = np.linspace(0, 1, n_bins + 1)
+        counts_cal_all, _ = np.histogram(y_prob_cal, bins=cal_edges)
+        counts_cal = counts_cal_all[counts_cal_all > 0][:len(prob_pred_cal)]
+        brier_cal = brier_score_loss(y_true, y_prob_cal)
+        ece_cal = float(np.sum(np.abs(prob_true_cal - prob_pred_cal) * counts_cal / counts_cal.sum()))
+        print(f"Platt-scaled Brier score: {brier_cal:.4f}  ECE: {ece_cal:.4f}")
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -288,10 +423,16 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
     ax.plot([0, 1], [0, 1], "k--", label="Perfectly calibrated")
 
     # Aggregate calibration curve with per-bin sample-count annotations
-    ax.plot(prob_pred, prob_true, marker="o", color="steelblue", linewidth=2, label=f"{model_name} (aggregate)")
+    ax.plot(prob_pred, prob_true, marker="o", color="steelblue", linewidth=2, label=f"{model_name} (raw)")
     for x, y_pt, n in zip(prob_pred, prob_true, counts):
         ax.annotate(f"n={n:,}", (x, y_pt), textcoords="offset points", xytext=(5, 5),
                     fontsize=7, color="gray")
+
+    # Platt-scaled overlay curve
+    if y_prob_cal is not None and prob_true_cal is not None:
+        curve_label = cal_label or f"{model_name} (Platt scaled)"
+        ax.plot(prob_pred_cal, prob_true_cal, marker="s", color="darkorange",
+                linewidth=2, label=curve_label)
 
     ax.set_xlabel("Mean predicted probability")
     ax.set_ylabel("Fraction of positives")
@@ -299,7 +440,13 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
     ax.legend(loc="upper left", fontsize=9)
 
     # Metrics in a tidy annotation box (bottom-right)
-    metrics_text = f"Brier: {brier:.4f}\nECE:   {ece:.4f}"
+    if brier_cal is not None:
+        metrics_text = (
+            f"Before — Brier: {brier:.4f}  ECE: {ece:.4f}\n"
+            f"After  — Brier: {brier_cal:.4f}  ECE: {ece_cal:.4f}"
+        )
+    else:
+        metrics_text = f"Brier: {brier:.4f}\nECE:   {ece:.4f}"
     ax.text(0.98, 0.02, metrics_text, transform=ax.transAxes,
             fontsize=9, va="bottom", ha="right", family="monospace",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="lightgray", alpha=0.9))
@@ -309,10 +456,11 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
     plt.close()
 
 
-def run_calibration_plot(model, X_test_pd, y_test, name, label="", n_bins=10):
+def run_calibration_plot(model, X_test_pd, y_test, name, label="", n_bins=10, calibrated_model=None):
     y_true = y_test.to_numpy() if hasattr(y_test, "to_numpy") else y_test
     y_prob = model.predict_proba(X_test_pd)[:, 1]
-    _save_calibration_plot(y_true, y_prob, name=name, label=label, n_bins=n_bins)
+    y_prob_cal = calibrated_model.predict_proba(X_test_pd)[:, 1] if calibrated_model is not None else None
+    _save_calibration_plot(y_true, y_prob, name=name, label=label, n_bins=n_bins, y_prob_cal=y_prob_cal)
 
 
 def run_shap(model, X_test_pd, name, label="", max_samples=500): # Max samples=None one if you want the full dataset passed

@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, "code/00_shared")
-from analysis_functions import load_splits, run_xgboost, run_shap, save_model, TEMP_VARS
+from analysis_functions import load_splits, run_xgboost, run_shap, save_model, TEMP_VARS, get_feature_names
 
 
 CAT_COLS = [  # Does not include SEWTYPE and ASECONDRY because we dropped those
@@ -36,13 +36,16 @@ splits_nc, splits_nc_nw = load_splits(
     temp_vars=TEMP_VARS
 )
 
-model_nc_w, X_test_nc_w = run_xgboost(
-    **splits_nc, cat_cols=CAT_COLS, scale_pos_weight=4.83,
+model_nc_w, cal_nc_w, X_test_nc_w = run_xgboost(
+    **{k: splits_nc[k] for k in ["X_train", "X_test", "y_train", "y_test", "w_train"]},
+    X_cal=splits_nc.get("X_cal"), y_cal=splits_nc.get("y_cal"), w_cal=splits_nc.get("w_cal"),
+    cat_cols=CAT_COLS, scale_pos_weight=4.83,
     label="WITH WEIGHTS — no CBSA", cbsa=False,
     name="current_climate_xgboost_no_cbsa",
 )
 run_shap(model_nc_w, X_test_nc_w, name="current_climate_xgboost_no_cbsa", label="WITH WEIGHTS — no CBSA")
 save_model(model_nc_w, "data/processed/models/current_climate_xgboost_no_cbsa_with_weights.pkl")
+save_model(cal_nc_w,  "data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl")
 
 # model_nc_nw, X_test_nc_nw = run_xgboost(
 #     **{k: splits_nc_nw[k] for k in ["X_train", "X_test", "y_train", "y_test"]},

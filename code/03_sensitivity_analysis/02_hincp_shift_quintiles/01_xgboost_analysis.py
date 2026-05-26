@@ -62,7 +62,7 @@ for q, factor in QUINTILE_SHIFTS.items():
 
 per_quintile = pl.DataFrame(rows)
 print(per_quintile)
-per_quintile.write_csv("tree_model_output/sensitivity_hincp_quintiles_per_quintile.csv")
+per_quintile.write_csv("tree_model_output/sensitivity/sensitivity_hincp_quintiles_per_quintile.csv")
 
 # --- Overall summary ---
 print(f"\n\n{'=' * 60}")

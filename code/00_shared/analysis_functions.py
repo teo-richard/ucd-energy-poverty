@@ -238,7 +238,7 @@ def run_xgboost(X_train, X_test, y_train, y_test, w_train=None,
     scale_pos_weight: ratio of negatives to positives in training data.
     cbsa=False drops OMB13CBSA from the feature set (and cat_cols) before training.
     name: if provided, runs 5-fold CV on the training set and saves a calibration plot
-          to tree_model_output/{name}_calibration.png before final training.
+          to tree_model_output/calibration/{name}_calibration.png before final training.
     X_cal/y_cal/w_cal: held-out calibration set for Platt scaling. If provided,
     a CalibratedClassifierCV(method='sigmoid') is fit and returned as the second
     element of the return tuple.
@@ -452,7 +452,8 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
             bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="lightgray", alpha=0.9))
 
     plt.tight_layout()
-    plt.savefig(f"tree_model_output/{name}_calibration.png", dpi=150)
+    os.makedirs("tree_model_output/calibration", exist_ok=True)
+    plt.savefig(f"tree_model_output/calibration/{name}_calibration.png", dpi=150)
     plt.close()
 
 

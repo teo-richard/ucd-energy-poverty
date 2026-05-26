@@ -96,5 +96,5 @@ delta_range = (
 )
 print(delta_range)
 
-results.write_csv("tree_model_output/sensitivity_heattype_counterfactual.csv")
-print("\nWrote tree_model_output/sensitivity_heattype_counterfactual.csv")
+results.write_csv("tree_model_output/sensitivity/sensitivity_heattype_counterfactual.csv")
+print("\nWrote tree_model_output/sensitivity/sensitivity_heattype_counterfactual.csv")

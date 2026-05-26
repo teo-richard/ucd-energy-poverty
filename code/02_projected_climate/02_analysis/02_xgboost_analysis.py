@@ -38,7 +38,7 @@ for year in YEARS:
     run_shap(raw_model_nc_w, X, name=f"proj_climate_xgboost_{year}", label=f"WITH WEIGHTS — {year}")
 
     out = pl.DataFrame({"CONTROL": data["CONTROL"], "pred_prob_xgb_w": pred_probs_w})
-    out.write_csv(f"tree_model_output/xgboost_{year}_with_weights.csv")
+    out.write_csv(f"tree_model_output/projections/xgboost_{year}_with_weights.csv")
 
     # mean_nw = model_nc_nw.predict_proba(X)[:, 1].mean()
     # print(f"WITHOUT WEIGHTS model — mean predicted EP probability: {mean_nw:.4f}")

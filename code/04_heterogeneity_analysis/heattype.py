@@ -35,7 +35,7 @@ feature_names = get_feature_names(model)
 
 # 2050 predictions (pre-computed)
 proj_clim_2050 = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv")
-pred_2050 = pl.read_csv("tree_model_output/xgboost_2050_with_weights.csv")
+pred_2050 = pl.read_csv("tree_model_output/projections/xgboost_2050_with_weights.csv")
 
 # 2023 predictions (generated here so comparison uses same model)
 curr_clim = pl.read_csv("data/processed/current_climate/basic_ready_for_trees_ahs_climate_no_cbsa.csv")
@@ -66,4 +66,4 @@ by_heattype = (
 )
 
 print(by_heattype)
-by_heattype.write_csv("tree_model_output/heterogeneity_by_heattype.csv")
+by_heattype.write_csv("tree_model_output/heterogeneity/heterogeneity_by_heattype.csv")

@@ -27,5 +27,5 @@ proj_by_cbsa = (
 
 out = curr_by_cbsa.join(proj_by_cbsa, on="OMB13CBSA", how="inner").sort("OMB13CBSA")
 
-out.write_csv("code/04_heterogeneity_analysis/cbsa_temp_comparison.csv")
+out.write_csv("tree_model_output/heterogeneity/cbsa_temp_comparison.csv")
 print(out)

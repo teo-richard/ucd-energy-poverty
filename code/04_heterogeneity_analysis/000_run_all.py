@@ -67,7 +67,7 @@ HEATTYPE_LABELS = pl.DataFrame({
 })
 
 proj_clim_2050 = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv")
-pred_2050      = pl.read_csv("tree_model_output/projections/xgboost_2050_with_weights.csv")
+pred_2050      = pl.read_csv("output/projections/xgboost_2050_with_weights.csv")
 pred_probs_2023 = model.predict_proba(X_pd)[:, 1]
 pred_2023 = pl.DataFrame({"CONTROL": df["CONTROL"], "pred_prob_xgb_w_2023": pred_probs_2023})
 
@@ -91,7 +91,7 @@ by_heattype = (
     .sort("mean_ep_prob_2023", descending=True)
 )
 print(by_heattype)
-by_heattype.write_csv("tree_model_output/heterogeneity/heterogeneity_by_heattype.csv")
+by_heattype.write_csv("output/heterogeneity/heterogeneity_by_heattype.csv")
 
 df_het = df.with_columns(pl.Series("pred_prob", pred_probs_2023))
 run_heterogeneity("HEATTYPE", df=df_het, X_pd=X_pd, model=model)

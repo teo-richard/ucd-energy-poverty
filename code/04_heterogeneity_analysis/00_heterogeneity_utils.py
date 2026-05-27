@@ -31,7 +31,7 @@ For observed-outcome analysis only (no tree model needed):
     step1_true_outcome(df, "HHRACE")
     step2_true_outcome(df, "HHRACE")
 
-All outputs land under tree_model_output/heterogeneity/{group_col}/.
+All outputs land under output/heterogeneity/{group_col}/.
 """
 
 import os
@@ -62,7 +62,7 @@ CONDITIONING_VARS: list[str] = ["WALLCRACK", "ACPRIMARY", "FUSEBLOW", "ROACH", "
 # Default file paths (relative to project root — run scripts from there)
 DEFAULT_MODEL_PATH    = "data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl"
 DEFAULT_CURR_CLM_PATH = "data/processed/current_climate/basic_ready_for_trees_ahs_climate_no_cbsa.csv"
-DEFAULT_OUTPUT_DIR    = "tree_model_output/heterogeneity/"
+DEFAULT_OUTPUT_DIR    = "output/heterogeneity/"
 
 # Categorical columns for XGBoost encoding (must match training pipeline)
 CAT_COLS_NO_CBSA: list[str] = [
@@ -576,7 +576,7 @@ def _prevalence_plot(
     for i, (p, ci, n) in enumerate(zip(ps, cis, ns)):
         ax.text(
             p + ci + x_max * 0.01,   # just past this bar's own error bar cap
-            i - 0.3,                  # slightly above the bar (inverted axis)
+            i - 0.2,                  # slightly above the bar (inverted axis)
             f"{p:.1%}  (n={n:,})",
             va="center", fontsize=TICK_SIZE,
         )

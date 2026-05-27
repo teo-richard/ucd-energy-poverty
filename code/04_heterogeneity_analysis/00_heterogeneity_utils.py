@@ -9,9 +9,9 @@ Two loaders, depending on what you need:
                 no tree model required.  Use for observed-outcome steps only.
 
   load_data() — also loads the model and runs predict_proba() to add
-                ``pred_prob``.  Required for predicted-probability and SHAP steps.
+                ``pred_prob``.  Required for the step 1 predicted-probability plot.
 
-Typical usage — one call does everything (predicted + observed + SHAP):
+Typical usage — one call does step 1 (predicted + observed) and step 2 (observed):
 
     from heterogeneity_utils import run_heterogeneity
     run_heterogeneity("HHRACE")
@@ -45,7 +45,6 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive backend — safe for scripts
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import shap
 from scipy.stats import gaussian_kde
 
 sys.path.insert(0, "code/00_shared")
@@ -58,6 +57,10 @@ from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars, g
 
 # Conditioning variables for Step 2 — edit this list to add/remove variables
 CONDITIONING_VARS: list[str] = ["WALLCRACK", "ACPRIMARY", "FUSEBLOW", "ROACH", "DISHH", "OMB13CBSA"]
+
+# CBSA conditioning produces a single heatmap rather than per-value density plots
+CBSA_COL        = "OMB13CBSA"
+CBSA_MIN_N_CELL = 50       # cells with fewer observations are grayed out in heatmap
 
 # Default file paths (relative to project root — run scripts from there)
 DEFAULT_MODEL_PATH    = "data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl"
@@ -81,7 +84,6 @@ COLS_TO_DROP: list[str] = ["energy_deprivation", "year", "WEIGHT", "CONTROL"]
 PALETTE      = list(plt.cm.tab10.colors)   # 10-color consistent cycle
 OVERALL_COLOR = "#333333"                  # dark gray for the "Overall" curve/bar
 FIGSIZE_DIST = (13, 6)                     # distribution / density plots
-FIGSIZE_SHAP = (10, 8)                     # SHAP beeswarm / bar plots
 DPI          = 150
 TITLE_SIZE   = 13
 LABEL_SIZE   = 11
@@ -249,14 +251,12 @@ def run_heterogeneity(
     X_pd: pd.DataFrame = None,
     model=None,
     output_dir: str = DEFAULT_OUTPUT_DIR,
-    max_shap_samples: int = 2000,
     true_col: str = "energy_deprivation",
 ) -> tuple:
     """Run all heterogeneity steps for a grouping variable.
 
-    Runs Steps 1–3 for **predicted** probabilities (``pred_prob`` column) and
-    Steps 1–2 for the **observed** binary outcome (``true_col`` column) in
-    parallel, so both analyses land in the same output directory.
+    Produces a step 1 predicted-probability density plot plus step 1–2
+    observed-outcome outputs (prevalence bar charts and conditioning heatmaps).
 
     Parameters
     ----------
@@ -268,8 +268,6 @@ def run_heterogeneity(
         wants to avoid loading them a second time.
     output_dir : str
         Root output directory; subdirectories are created as needed.
-    max_shap_samples : int
-        Per-subgroup SHAP row cap (randomly subsampled, seed=42).
     true_col : str
         Column holding the observed binary outcome.  Set to None to skip the
         observed-outcome analysis.
@@ -280,11 +278,9 @@ def run_heterogeneity(
     """
     if df is None or X_pd is None or model is None:
         df, X_pd, model = load_data()
-    # Predicted probability analysis (Steps 1–3)
+    # Step 1: predicted probability distribution
     step1_distribution(df, group_col, output_dir=output_dir)
-    step2_conditional(df, group_col, output_dir=output_dir)
-    step3_shap(df, group_col, X_pd, model, output_dir=output_dir, max_samples=max_shap_samples)
-    # Observed outcome analysis (Steps 1–2; SHAP is model-based and doesn't apply)
+    # Steps 1–2: observed binary outcome only (no predicted-prob steps after step 1)
     if true_col is not None:
         step1_true_outcome(df, group_col, true_col=true_col, output_dir=output_dir)
         step2_true_outcome(df, group_col, true_col=true_col, output_dir=output_dir)
@@ -335,66 +331,6 @@ def step1_distribution(
 # ---------------------------------------------------------------------------
 # Step 2: Conditional subgroup comparisons
 # ---------------------------------------------------------------------------
-
-def step2_conditional(
-    df: pl.DataFrame,
-    group_col: str,
-    prob_col: str = "pred_prob",
-    output_dir: str = DEFAULT_OUTPUT_DIR,
-) -> None:
-    """For each conditioning variable, stratify the sample by that variable's
-    values and recompute Step 1 outputs within each stratum.
-
-    Outputs (written to ``{output_dir}/{group_col}/step2/{cond_var}/``):
-    - ``{cond_var}_{cond_val}_stats.csv``
-    - ``{cond_var}_{cond_val}_distribution.png``
-    """
-    print(f"\n[Step 2] {group_col}")
-
-    lmap = LABEL_MAPS.get(group_col)
-
-    for cond_var in CONDITIONING_VARS:
-        if cond_var not in df.columns:
-            print(f"  Warning: conditioning variable '{cond_var}' not in DataFrame — skipping.")
-            continue
-
-        cond_out = os.path.join(output_dir, group_col, "step2", cond_var)
-        os.makedirs(cond_out, exist_ok=True)
-
-        unique_vals = (
-            df.select(pl.col(cond_var).drop_nulls().unique())
-            .to_series()
-            .to_list()
-        )
-        unique_vals = sorted(unique_vals)
-
-        print(f"  Conditioning on {cond_var} ({len(unique_vals)} strata) …")
-
-        for val in unique_vals:
-            stratum = df.filter(pl.col(cond_var) == val)
-            if len(stratum) < 5:
-                # Too few rows for meaningful density estimation
-                continue
-
-            safe_val = _safe_filename(str(val))
-            stem     = f"{cond_var}_{safe_val}"
-
-            # Stats CSV
-            stats = _compute_stats(stratum, group_col, prob_col)
-            stats.write_csv(os.path.join(cond_out, f"{stem}_stats.csv"))
-
-            # Density plot
-            _density_plot(
-                df=stratum,
-                group_col=group_col,
-                prob_col=prob_col,
-                title=f"Pred. Deprivation Prob. — {group_col} | {cond_var} = {val}",
-                out_path=os.path.join(cond_out, f"{stem}_distribution.png"),
-                label_map=lmap,
-            )
-
-        print(f"    → {cond_out}/")
-
 
 # ---------------------------------------------------------------------------
 # Steps 1–2: Observed binary outcome (energy_deprivation)
@@ -450,12 +386,12 @@ def step2_true_outcome(
 ) -> None:
     """Conditional subgroup comparisons using the observed binary outcome.
 
-    Mirrors ``step2_conditional`` but produces prevalence bar charts instead of
-    KDE density plots.
+    For each conditioning variable produces a single heatmap: rows = strata of
+    the conditioning variable (sorted by overall mean, highest at top), columns =
+    group_col subgroups, cells = observed deprivation rate (%).
 
     Outputs (written to ``{output_dir}/{group_col}/step2/{cond_var}/``):
-    - ``{cond_var}_{cond_val}_observed_stats.csv``
-    - ``{cond_var}_{cond_val}_observed_prevalence.png``
+    - ``{cond_var}_observed_heatmap.png``
     """
     if true_col not in df.columns:
         print(f"\n[Step 2 - Observed] skipped — '{true_col}' not in DataFrame.")
@@ -469,118 +405,132 @@ def step2_true_outcome(
         if cond_var not in df.columns:
             print(f"  Warning: conditioning variable '{cond_var}' not in DataFrame — skipping.")
             continue
+        if cond_var == group_col:
+            print(f"  Skipping {cond_var} — same as analysis variable.")
+            continue
 
         cond_out = os.path.join(output_dir, group_col, "step2", cond_var)
         os.makedirs(cond_out, exist_ok=True)
 
-        unique_vals = sorted(
-            df.select(pl.col(cond_var).drop_nulls().unique()).to_series().to_list()
+        min_n    = CBSA_MIN_N_CELL if cond_var == CBSA_COL else 5
+        out_path = os.path.join(cond_out, f"{cond_var}_observed_heatmap.png")
+        _heatmap(
+            df=df,
+            group_col=group_col,
+            cond_col=cond_var,
+            value_col=true_col,
+            title=f"Obs. Deprivation Rate — {group_col} by {cond_var}",
+            out_path=out_path,
+            group_label_map=lmap,
+            cond_label_map=LABEL_MAPS.get(cond_var),
+            min_n_cell=min_n,
         )
-
-        print(f"  Conditioning on {cond_var} ({len(unique_vals)} strata) …")
-
-        for val in unique_vals:
-            stratum = df.filter(pl.col(cond_var) == val)
-            if len(stratum) < 5:
-                continue
-
-            safe_val = _safe_filename(str(val))
-            stem     = f"{cond_var}_{safe_val}"
-
-            stats = _compute_stats(stratum, group_col, true_col)
-            stats.write_csv(os.path.join(cond_out, f"{stem}_observed_stats.csv"))
-
-            _prevalence_plot(
-                df=stratum,
-                group_col=group_col,
-                binary_col=true_col,
-                title=f"Obs. Deprivation Rate — {group_col} | {cond_var} = {val}",
-                out_path=os.path.join(cond_out, f"{stem}_observed_prevalence.png"),
-                label_map=lmap,
-            )
-
-        print(f"    → {cond_out}/")
-
-
-# ---------------------------------------------------------------------------
-# Step 3: SHAP beeswarm plots by subgroup
-# ---------------------------------------------------------------------------
-
-def step3_shap(
-    df: pl.DataFrame,
-    group_col: str,
-    X_pd: pd.DataFrame,
-    model,
-    output_dir: str = DEFAULT_OUTPUT_DIR,
-    max_samples: int = 2000,
-) -> None:
-    """Generate SHAP beeswarm and mean-absolute-SHAP bar charts for the full
-    sample and for each subgroup defined by ``group_col``.
-
-    Outputs (written to ``{output_dir}/{group_col}/step3/``):
-    - ``overall_beeswarm.png`` / ``overall_bar.png``
-    - ``{group_val}_beeswarm.png`` / ``{group_val}_bar.png``  (per subgroup)
-
-    Parameters
-    ----------
-    max_samples : int
-        Maximum rows passed to the SHAP explainer per subgroup.  Large datasets
-        are randomly subsampled (seed=42).  Set to None to use all rows.
-    """
-    out_dir = os.path.join(output_dir, group_col, "step3")
-    os.makedirs(out_dir, exist_ok=True)
-
-    print(f"\n[Step 3] {group_col} — SHAP")
-
-    # SHAP requires the raw XGBoost booster, not the Platt-scaling wrapper
-    raw_model = model.estimator if hasattr(model, "estimator") else model
-    explainer = shap.TreeExplainer(raw_model)
-
-    # Rebuild a positional index array aligned with df (both built from same CSV)
-    group_series = df[group_col].to_numpy()  # numpy array for fast masking
-
-    # --- Overall baseline ---------------------------------------------------
-    print("  Computing overall SHAP values …")
-    X_overall = _subsample(X_pd, max_samples, seed=42)
-    _shap_beeswarm_and_bar(
-        explainer=explainer,
-        X_sub=X_overall,
-        label="Overall",
-        out_dir=out_dir,
-        stem="overall",
-    )
-
-    # --- Per-subgroup -------------------------------------------------------
-    lmap = LABEL_MAPS.get(group_col)
-    unique_vals = sorted(
-        v for v in df[group_col].drop_nulls().unique().to_list()
-    )
-    for val in unique_vals:
-        mask  = group_series == val
-        X_grp = X_pd.iloc[mask]
-
-        if len(X_grp) < 5:
-            print(f"  Skipping {group_col}={val} (n={len(X_grp)} < 5)")
-            continue
-
-        X_sub = _subsample(X_grp, max_samples, seed=42)
-        safe  = _safe_filename(str(val))
-        print(f"  {group_col}={val}  n={len(X_grp):,}  (SHAP on {len(X_sub):,} rows)")
-
-        _shap_beeswarm_and_bar(
-            explainer=explainer,
-            X_sub=X_sub,
-            label=f"{group_col} = {_label(val, lmap)}",
-            out_dir=out_dir,
-            stem=safe,
-        )
-
-    print(f"  → {out_dir}/")
+        print(f"    → {out_path}")
 
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+def _heatmap(
+    df: pl.DataFrame,
+    group_col: str,
+    cond_col: str,
+    value_col: str,
+    title: str,
+    out_path: str,
+    group_label_map: dict | None = None,
+    cond_label_map: dict | None = None,
+    min_n_cell: int = 5,
+) -> None:
+    """Heatmap of mean value_col: cond_col strata (rows) × group_col subgroups (cols).
+
+    Rows are sorted by overall stratum mean (highest at top). Cells with fewer
+    than min_n_cell observations are grayed out.
+    """
+    df = df.filter(pl.col(group_col).is_not_null() & pl.col(cond_col).is_not_null())
+
+    # Per-cell mean and count
+    cell_stats = (
+        df.group_by([cond_col, group_col])
+        .agg([
+            pl.col(value_col).drop_nulls().cast(pl.Float64).mean().alias("_mean"),
+            pl.col(value_col).drop_nulls().len().alias("_n"),
+        ])
+    )
+
+    # Row order: cond_col values sorted by overall mean (highest at top)
+    cond_order = (
+        df.group_by(cond_col)
+        .agg(pl.col(value_col).drop_nulls().cast(pl.Float64).mean().alias("_overall"))
+        .sort("_overall", descending=True)
+        .select(cond_col)
+        .to_series()
+        .to_list()
+    )
+
+    # Column order and labels
+    group_vals = sorted(df[group_col].drop_nulls().unique().to_list())
+    col_labels = [_label(v, group_label_map) for v in group_vals]
+    row_labels = [_label(v, cond_label_map) for v in cond_order]
+
+    # Build value and count matrices
+    nrows, ncols = len(cond_order), len(group_vals)
+    mat_val  = np.full((nrows, ncols), np.nan)
+    mat_n    = np.zeros((nrows, ncols), dtype=int)
+    cond_idx  = {v: i for i, v in enumerate(cond_order)}
+    group_idx = {v: i for i, v in enumerate(group_vals)}
+    for row in cell_stats.to_dicts():
+        r = cond_idx[row[cond_col]]
+        c = group_idx[row[group_col]]
+        mat_val[r, c] = row["_mean"]
+        mat_n[r, c]   = row["_n"]
+
+    # Mask cells below minimum n — they will render as gray
+    masked = np.ma.masked_where((mat_n < min_n_cell) | np.isnan(mat_val), mat_val)
+
+    # Scale figure: wider for more columns; taller per row for small matrices,
+    # compressed for large ones (e.g. many CBSAs)
+    max_row_label_len = max((len(l) for l in row_labels), default=5)
+    left_pad = max(2.5, max_row_label_len * 0.11)
+    fig_w = max(8, ncols * 1.8 + left_pad)
+    row_h = 0.5 if nrows > 30 else 0.8
+    fig_h = max(4, nrows * row_h + 2.5)
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+    cmap = plt.cm.YlOrRd.copy()
+    cmap.set_bad("lightgray")
+    vmax = float(np.nanmax(mat_val)) if not np.all(np.isnan(mat_val)) else 1.0
+    im = ax.imshow(masked, aspect="auto", cmap=cmap, vmin=0, vmax=vmax)
+
+    # Annotation font scales down for large matrices
+    annot_fs = max(7, min(12, 100 // max(nrows, ncols)))
+    threshold = 0.5 * vmax
+    for r in range(nrows):
+        for c in range(ncols):
+            if not np.ma.is_masked(masked[r, c]):
+                v = mat_val[r, c]
+                color = "white" if v > threshold else "black"
+                ax.text(c, r, f"{v:.1%}\n(n={mat_n[r, c]:,})", ha="center", va="center",
+                        fontsize=annot_fs, color=color)
+
+    row_tick_fs = 7 if nrows > 30 else TICK_SIZE
+    ax.set_xticks(range(ncols))
+    ax.set_xticklabels(col_labels, rotation=35, ha="right", fontsize=TICK_SIZE)
+    ax.set_yticks(range(nrows))
+    ax.set_yticklabels(row_labels, fontsize=row_tick_fs)
+    ax.set_xlabel(group_col, fontsize=LABEL_SIZE)
+    ax.set_ylabel(cond_col, fontsize=LABEL_SIZE)
+    ax.set_title(title, fontsize=TITLE_SIZE)
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+    cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
+    cbar.ax.tick_params(labelsize=TICK_SIZE)
+
+    fig.tight_layout()
+    plt.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+
 
 def _compute_stats(df: pl.DataFrame, group_col: str, prob_col: str) -> pl.DataFrame:
     """Return a Polars DataFrame of summary statistics per group + Overall row.
@@ -773,49 +723,6 @@ def _density_plot(
     fig.tight_layout()
     plt.savefig(out_path, dpi=DPI, bbox_inches="tight")
     plt.close(fig)
-
-
-def _shap_beeswarm_and_bar(
-    explainer: shap.TreeExplainer,
-    X_sub: pd.DataFrame,
-    label: str,
-    out_dir: str,
-    stem: str,
-) -> None:
-    """Compute SHAP values for X_sub and save a beeswarm + mean-abs bar chart.
-
-    SHAP's plot functions draw onto whatever figure is current, so we use
-    ``plt.figure()`` (matching the pattern in analysis_functions.run_shap)
-    rather than the object-oriented ``fig, ax`` API.
-    """
-    explanation = explainer(X_sub)
-
-    # --- Beeswarm -----------------------------------------------------------
-    plt.figure(figsize=FIGSIZE_SHAP)
-    shap.plots.beeswarm(explanation, show=False, max_display=20)
-    plt.title(f"SHAP Beeswarm — {label}", fontsize=TITLE_SIZE)
-    plt.tick_params(labelsize=TICK_SIZE)
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, f"{stem}_beeswarm.png"), dpi=DPI, bbox_inches="tight")
-    plt.clf()
-    plt.close("all")
-
-    # --- Mean absolute SHAP bar chart ---------------------------------------
-    plt.figure(figsize=FIGSIZE_SHAP)
-    shap.plots.bar(explanation.abs.mean(0), show=False, max_display=20)
-    plt.title(f"Mean |SHAP| — {label}", fontsize=TITLE_SIZE)
-    plt.tick_params(labelsize=TICK_SIZE)
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, f"{stem}_bar.png"), dpi=DPI, bbox_inches="tight")
-    plt.clf()
-    plt.close("all")
-
-
-def _subsample(X: pd.DataFrame, max_samples: int | None, seed: int = 42) -> pd.DataFrame:
-    """Return a random subsample of X if it exceeds max_samples rows."""
-    if max_samples is None or len(X) <= max_samples:
-        return X
-    return X.sample(n=max_samples, random_state=seed)
 
 
 def _safe_filename(s: str) -> str:

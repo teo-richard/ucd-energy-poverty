@@ -57,11 +57,11 @@ from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars, g
 # ---------------------------------------------------------------------------
 
 # Conditioning variables for Step 2 — edit this list to add/remove variables
-CONDITIONING_VARS: list[str] = ["WALLCRACK", "ACPRIMARY", "FUSEBLOW", "ROACH", "DISHH"]
+CONDITIONING_VARS: list[str] = ["WALLCRACK", "ACPRIMARY", "FUSEBLOW", "ROACH", "DISHH", "OMB13CBSA"]
 
 # Default file paths (relative to project root — run scripts from there)
 DEFAULT_MODEL_PATH    = "data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl"
-DEFAULT_CURR_CLM_PATH = "data/processed/current_climate/basic_ready_for_trees_ahs_climate_no_cbsa.csv"
+DEFAULT_CURR_CLM_PATH = "data/processed/current_climate/basic_ready_for_trees_ahs_climate.csv"
 DEFAULT_OUTPUT_DIR    = "output/heterogeneity/"
 
 # Categorical columns for XGBoost encoding (must match training pipeline)
@@ -88,6 +88,98 @@ LABEL_SIZE   = 11
 TICK_SIZE    = 9
 LEGEND_SIZE  = 9
 KDE_POINTS   = 400                         # resolution of KDE curves
+
+
+# ---------------------------------------------------------------------------
+# Human-readable labels for coded variables
+# ---------------------------------------------------------------------------
+
+LABEL_MAPS: dict[str, dict] = {
+    "DISHH": {
+        1: "At least 1 disabled person",
+        2: "No disabled persons",
+    },
+    "DIVISION": {
+        1: "New England",
+        2: "Middle Atlantic",
+        3: "East North Central",
+        4: "West North Central",
+        5: "South Atlantic",
+        6: "East South Central",
+        7: "West South Central",
+        8: "Mountain",
+        9: "Pacific",
+    },
+    "ACPRIMARY": {
+        1: "Electric central AC",
+        2: "Gas central AC",
+        3: "LP gas central AC",
+        4: "Other fuel central AC",
+        5: "1 room unit",
+        6: "2 room units",
+        7: "3 room units",
+        8: "4 room units",
+        9: "5 room units",
+        10: "6 room units",
+        11: "7+ room units",
+        12: "No AC",
+    },
+    "FUSEBLOW": {
+        1: "1 blown (last 3 months)",
+        2: "2 blown",
+        3: "3 blown",
+        4: "4+ blown",
+        5: "None blown",
+    },
+    "ROACH": {
+        1: "Seen daily (last 12 months)",
+        2: "Seen weekly",
+        3: "Seen monthly",
+        4: "Seen few times/year",
+        5: "None seen",
+    },
+    "WALLCRACK": {
+        1: "Yes (holes/cracks present)",
+        2: "No holes/cracks",
+    },
+    "HHRACE": {
+        1: "White alone",
+        2: "Black alone",
+        3: "American Indian alone",
+        4: "Asian alone",
+        5: "Native Hawaiian / Pacific Islander",
+        6: "Other / multi-racial",
+    },
+    "TENURE": {
+        1: "Own / being bought",
+        2: "Rent for cash",
+        3: "No cash rent",
+    },
+    "HEATTYPE": {
+        1: "Forced air furnace",
+        2: "Steam / hot water",
+        3: "Heat pump",
+        4: "Electric baseboard",
+        5: "Pipeless furnace",
+        6: "Portable electric",
+        7: "Cooking stove for heat",
+        8: "No heating system",
+        999: "Other",
+    },
+    "age_group": {
+        "1_Under35": "Under 35",
+        "2_35to49": "35–49",
+        "3_50to64": "50–64",
+        "4_65plus": "65+",
+    },
+}
+
+
+def _label(val, label_map: dict | None) -> str:
+    """Return the human-readable label for val, falling back to str(val)."""
+    if label_map is None:
+        return str(val)
+    return label_map.get(val, str(val))
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +327,7 @@ def step1_distribution(
         prob_col=prob_col,
         title=f"Predicted Deprivation Probability — by {group_col}",
         out_path=png_path,
+        label_map=LABEL_MAPS.get(group_col),
     )
     print(f"  Distribution plot → {png_path}")
 
@@ -257,6 +350,8 @@ def step2_conditional(
     - ``{cond_var}_{cond_val}_distribution.png``
     """
     print(f"\n[Step 2] {group_col}")
+
+    lmap = LABEL_MAPS.get(group_col)
 
     for cond_var in CONDITIONING_VARS:
         if cond_var not in df.columns:
@@ -295,6 +390,7 @@ def step2_conditional(
                 prob_col=prob_col,
                 title=f"Pred. Deprivation Prob. — {group_col} | {cond_var} = {val}",
                 out_path=os.path.join(cond_out, f"{stem}_distribution.png"),
+                label_map=lmap,
             )
 
         print(f"    → {cond_out}/")
@@ -341,6 +437,7 @@ def step1_true_outcome(
         binary_col=true_col,
         title=f"Observed Energy Deprivation Rate — by {group_col}",
         out_path=png_path,
+        label_map=LABEL_MAPS.get(group_col),
     )
     print(f"  Observed prevalence plot → {png_path}")
 
@@ -365,6 +462,8 @@ def step2_true_outcome(
         return
 
     print(f"\n[Step 2 - Observed] {group_col}")
+
+    lmap = LABEL_MAPS.get(group_col)
 
     for cond_var in CONDITIONING_VARS:
         if cond_var not in df.columns:
@@ -397,6 +496,7 @@ def step2_true_outcome(
                 binary_col=true_col,
                 title=f"Obs. Deprivation Rate — {group_col} | {cond_var} = {val}",
                 out_path=os.path.join(cond_out, f"{stem}_observed_prevalence.png"),
+                label_map=lmap,
             )
 
         print(f"    → {cond_out}/")
@@ -451,6 +551,7 @@ def step3_shap(
     )
 
     # --- Per-subgroup -------------------------------------------------------
+    lmap = LABEL_MAPS.get(group_col)
     unique_vals = sorted(
         v for v in df[group_col].drop_nulls().unique().to_list()
     )
@@ -469,7 +570,7 @@ def step3_shap(
         _shap_beeswarm_and_bar(
             explainer=explainer,
             X_sub=X_sub,
-            label=f"{group_col} = {val}",
+            label=f"{group_col} = {_label(val, lmap)}",
             out_dir=out_dir,
             stem=safe,
         )
@@ -524,6 +625,7 @@ def _prevalence_plot(
     binary_col: str,
     title: str,
     out_path: str,
+    label_map: dict | None = None,
 ) -> None:
     """Horizontal bar chart of observed deprivation prevalence per subgroup.
 
@@ -552,7 +654,7 @@ def _prevalence_plot(
     overall_arr = df[binary_col].drop_nulls().cast(pl.Float64).to_numpy()
     overall_prev = float(overall_arr.mean())
 
-    labels = [str(r["val"]) for r in rows]
+    labels = [_label(r["val"], label_map) for r in rows]
     ps     = [r["p"]  for r in rows]
     cis    = [r["ci"] for r in rows]
     ns     = [r["n"]  for r in rows]
@@ -614,6 +716,7 @@ def _density_plot(
     prob_col: str,
     title: str,
     out_path: str,
+    label_map: dict | None = None,
 ) -> None:
     """Overlapping KDE density curves — one per subgroup plus an Overall curve."""
     fig, ax = plt.subplots(figsize=FIGSIZE_DIST)
@@ -636,7 +739,7 @@ def _density_plot(
             kde(x_grid),
             color=PALETTE[i % len(PALETTE)],
             linewidth=1.8,
-            label=f"{val}  (n={len(probs):,})",
+            label=f"{_label(val, label_map)}  (n={len(probs):,})",
             alpha=0.85,
         )
 

@@ -1,6 +1,8 @@
 import sys
 sys.path.insert(0, "code/00_shared")
+sys.path.insert(0, "code/04_heterogeneity_analysis")
 from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars, get_feature_names
+from heterogeneity_utils import run_heterogeneity
 import polars as pl
 
 CAT_COLS_NO_CBSA = [
@@ -67,3 +69,8 @@ by_heattype = (
 
 print(by_heattype)
 by_heattype.write_csv("tree_model_output/heterogeneity/heterogeneity_by_heattype.csv")
+
+# Full three-step heterogeneity analysis (distribution + conditional + SHAP).
+# Pass the already-loaded objects so nothing is read from disk a second time.
+df_het = curr_clim.with_columns(pl.Series("pred_prob", pred_probs_2023))
+run_heterogeneity("HEATTYPE", df=df_het, X_pd=X_2023, model=model)

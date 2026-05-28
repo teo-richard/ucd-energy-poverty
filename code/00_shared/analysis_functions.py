@@ -377,13 +377,16 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
 
     brier = brier_score_loss(y_true, y_prob)
     ece = float(np.sum(np.abs(prob_true - prob_pred) * counts / counts.sum()))
+    base_rate = float(np.mean(y_true))
+    brier_ref = base_rate * (1 - base_rate)
+    bss = 1 - brier / brier_ref if brier_ref > 0 else float("nan")
 
     header = f" — {label}" if label else ""
     print(f"\n\nCALIBRATION{header}")
-    print(f"Brier score: {brier:.4f}  ECE: {ece:.4f}")
+    print(f"Brier score: {brier:.4f}  BSS: {bss:.4f}  ECE: {ece:.4f}")
 
     # Compute post-calibration metrics if provided
-    brier_cal = ece_cal = prob_true_cal = prob_pred_cal = None
+    brier_cal = ece_cal = bss_cal = prob_true_cal = prob_pred_cal = None
     if y_prob_cal is not None:
         prob_true_cal, prob_pred_cal = calibration_curve(y_true, y_prob_cal, n_bins=n_bins, strategy=strategy)
         if strategy == "quantile":
@@ -395,7 +398,8 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
         counts_cal = counts_cal_all[counts_cal_all > 0][:len(prob_pred_cal)]
         brier_cal = brier_score_loss(y_true, y_prob_cal)
         ece_cal = float(np.sum(np.abs(prob_true_cal - prob_pred_cal) * counts_cal / counts_cal.sum()))
-        print(f"Platt-scaled Brier score: {brier_cal:.4f}  ECE: {ece_cal:.4f}")
+        bss_cal = 1 - brier_cal / brier_ref if brier_ref > 0 else float("nan")
+        print(f"Platt-scaled Brier score: {brier_cal:.4f}  BSS: {bss_cal:.4f}  ECE: {ece_cal:.4f}")
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -442,11 +446,11 @@ def _save_calibration_plot(y_true, y_prob, name, label="", n_bins=10, strategy="
     # Metrics in a tidy annotation box (bottom-right)
     if brier_cal is not None:
         metrics_text = (
-            f"Before — Brier: {brier:.4f}  ECE: {ece:.4f}\n"
-            f"After  — Brier: {brier_cal:.4f}  ECE: {ece_cal:.4f}"
+            f"Before — Brier: {brier:.4f}  BSS: {bss:.4f}  ECE: {ece:.4f}\n"
+            f"After  — Brier: {brier_cal:.4f}  BSS: {bss_cal:.4f}  ECE: {ece_cal:.4f}"
         )
     else:
-        metrics_text = f"Brier: {brier:.4f}\nECE:   {ece:.4f}"
+        metrics_text = f"Brier: {brier:.4f}\nBSS:   {bss:.4f}\nECE:   {ece:.4f}"
     ax.text(0.98, 0.02, metrics_text, transform=ax.transAxes,
             fontsize=9, va="bottom", ha="right", family="monospace",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="lightgray", alpha=0.9))

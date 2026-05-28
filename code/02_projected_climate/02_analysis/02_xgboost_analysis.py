@@ -21,6 +21,14 @@ raw_model_nc_w = load_model("data/processed/models/current_climate_xgboost_no_cb
 cal_model_nc_w = load_model("data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl")
 # model_nc_nw = load_model("data/processed/models/current_climate_xgboost_no_cbsa_without_weights.pkl")
 
+feature_names = get_feature_names(raw_model_nc_w)
+importance = pl.DataFrame({
+    "feature": feature_names,
+    "importance": raw_model_nc_w.feature_importances_,
+}).sort("importance", descending=True)
+importance.write_csv("output/projections/xgboost_no_cbsa_feature_importance.csv")
+print("Feature importance saved.")
+
 for year in YEARS:
     print(f"\n\n{'=' * 60}")
     print(f"YEAR: {year}")

@@ -48,5 +48,10 @@ for year in YEARS:
     out = pl.DataFrame({"CONTROL": data["CONTROL"], "pred_prob_xgb_w": pred_probs_w})
     out.write_csv(f"output/projections/xgboost_{year}_with_weights.csv")
 
+    true_desc = data["energy_deprivation"].cast(pl.Float64).describe().rename({"value": "true_energy_deprivation"})
+    pred_desc = pl.Series("pred_energy_deprivation", pred_probs_w).describe().rename({"value": "pred_energy_deprivation"})
+    true_desc.join(pred_desc, on="statistic").write_csv(f"output/projections/xgboost_{year}_ep_summary_stats.csv")
+    print(f"EP summary stats saved to output/projections/xgboost_{year}_ep_summary_stats.csv")
+
     # mean_nw = model_nc_nw.predict_proba(X)[:, 1].mean()
     # print(f"WITHOUT WEIGHTS model — mean predicted EP probability: {mean_nw:.4f}")

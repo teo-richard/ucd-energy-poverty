@@ -17,7 +17,8 @@ to-dos/
 .claude/
 notes/
 findings.md
-prof_summary.md
+initial_summary.md
+code/01_current_climate/basic_investigate.py
 
 # Temporary
 999_check_high_lev.py

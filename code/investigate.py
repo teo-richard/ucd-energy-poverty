@@ -8,7 +8,11 @@ proj = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv")
 
 
 print("Current temps:")
-print(current[["mintemp", "maxtemp", "avgtemp"]].describe())
+current_temp_summary = current[["mintemp", "maxtemp", "avgtemp"]].describe()
+print(current_temp_summary)
+current_temp_summary.write_csv("output/current_temp_summary.csv")
 
 print("Projected temps:")
-print(proj[["proj_tasmin", "proj_tasmax", "proj_tas"]].describe())
+proj_temp_summary = proj[["proj_tasmin", "proj_tasmax", "proj_tas"]].describe()
+print(proj_temp_summary)
+proj_temp_summary.write_csv("output/projected_temp_summary.csv")

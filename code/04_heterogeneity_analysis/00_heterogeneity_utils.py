@@ -56,11 +56,20 @@ from analysis_functions import load_model, prepare_cat_cols, filter_temp_vars, g
 # ---------------------------------------------------------------------------
 
 # Conditioning variables for Step 2 — edit this list to add/remove variables
-CONDITIONING_VARS: list[str] = ["WALLCRACK", "ACPRIMARY", "FUSEBLOW", "ROACH", "DISHH", "OMB13CBSA"]
+CONDITIONING_VARS: list[str] = ["WALLCRACK", "ACPRIMARY", "FUSEBLOW", "ROACH", "DISHH", "OMB13CBSA", "income_quintile"]
 
 # CBSA conditioning produces a single heatmap rather than per-value density plots
-CBSA_COL        = "OMB13CBSA"
-CBSA_MIN_N_CELL = 50       # cells with fewer observations are grayed out in heatmap
+CBSA_COL    = "OMB13CBSA"
+
+# Income — continuous (HINCP), binned into quintiles for both grouping and conditioning.
+# Binning happens once in load_df() so the column is available everywhere.
+INCOME_COL              = "HINCP"
+INCOME_GROUP_COL        = "income_quintile"
+INCOME_QUINTILE_LABELS: list[str] = ["1_Q1", "2_Q2", "3_Q3", "4_Q4", "5_Q5"]
+
+# Applies to every conditioning-variable heatmap: cells with fewer observations
+# than this are grayed out, regardless of which conditioning variable produced them
+MIN_N_CELL  = 50
 
 # Default file paths (relative to project root — run scripts from there)
 DEFAULT_MODEL_PATH    = "data/processed/models/current_climate_xgboost_no_cbsa_with_weights_calibrated.pkl"
@@ -113,18 +122,10 @@ LABEL_MAPS: dict[str, dict] = {
         9: "Pacific",
     },
     "ACPRIMARY": {
-        1: "Electric central AC",
-        2: "Gas central AC",
-        3: "LP gas central AC",
-        4: "Other fuel central AC",
-        5: "1 room unit",
-        6: "2 room units",
-        7: "3 room units",
-        8: "4 room units",
-        9: "5 room units",
-        10: "6 room units",
-        11: "7+ room units",
-        12: "No AC",
+        1: "Central AC",
+        2: "Room AC",
+        3: "No AC",
+        999: "Other/Unknown",
     },
     "FUSEBLOW": {
         1: "1 blown (last 3 months)",
@@ -174,6 +175,13 @@ LABEL_MAPS: dict[str, dict] = {
         "3_50to64": "50–64",
         "4_65plus": "65+",
     },
+    "income_quintile": {
+        "1_Q1": "Q1 (lowest income)",
+        "2_Q2": "Q2",
+        "3_Q3": "Q3",
+        "4_Q4": "Q4",
+        "5_Q5": "Q5 (highest income)",
+    },
 }
 
 
@@ -197,9 +205,20 @@ def load_df(curr_clim_path: str = DEFAULT_CURR_CLM_PATH) -> pl.DataFrame:
 
     Use ``load_data()`` instead when you also need predicted probabilities
     (``pred_prob``) or SHAP values.
+
+    ``income_quintile`` (``HINCP`` cut into quintiles ``1_Q1``…``5_Q5``) is
+    attached here too, so it's available everywhere as both a grouping
+    variable (see ``income.py``) and a Step 2 conditioning variable (see
+    ``CONDITIONING_VARS``).
     """
     print("Reading current-climate CSV …")
-    return pl.read_csv(curr_clim_path)
+    df = pl.read_csv(curr_clim_path)
+    df = df.with_columns(
+        pl.col(INCOME_COL).qcut(5, labels=INCOME_QUINTILE_LABELS)
+        .cast(pl.Utf8)
+        .alias(INCOME_GROUP_COL)
+    )
+    return df
 
 
 def load_data(
@@ -412,7 +431,6 @@ def step2_true_outcome(
         cond_out = os.path.join(output_dir, group_col, "step2", cond_var)
         os.makedirs(cond_out, exist_ok=True)
 
-        min_n    = CBSA_MIN_N_CELL if cond_var == CBSA_COL else 5
         out_path = os.path.join(cond_out, f"{cond_var}_observed_heatmap.png")
         _heatmap(
             df=df,
@@ -423,7 +441,7 @@ def step2_true_outcome(
             out_path=out_path,
             group_label_map=lmap,
             cond_label_map=LABEL_MAPS.get(cond_var),
-            min_n_cell=min_n,
+            min_n_cell=MIN_N_CELL,
         )
         print(f"    → {out_path}")
 
@@ -441,7 +459,7 @@ def _heatmap(
     out_path: str,
     group_label_map: dict | None = None,
     cond_label_map: dict | None = None,
-    min_n_cell: int = 5,
+    min_n_cell: int = MIN_N_CELL,
 ) -> None:
     """Heatmap of mean value_col: cond_col strata (rows) × group_col subgroups (cols).
 

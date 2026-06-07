@@ -5,7 +5,8 @@ import pandas as pd
 
 current = pl.read_csv("data/processed/current_climate/basic_ready_for_trees_ahs_climate.csv")
 proj = pl.read_csv("data/processed/projected_climate/02_02_ahs_cmip_2050.csv")
-
+data_path = "data/processed/current_climate/basic_ready_for_trees_ahs_climate.csv"
+ahs_climate = pl.read_csv(data_path)
 
 print("Current temps:")
 current_temp_summary = current[["mintemp", "maxtemp", "avgtemp"]].describe()
@@ -16,3 +17,11 @@ print("Projected temps:")
 proj_temp_summary = proj[["proj_tasmin", "proj_tasmax", "proj_tas"]].describe()
 print(proj_temp_summary)
 proj_temp_summary.write_csv("output/projected_temp_summary.csv")
+
+print("ACPRIMARY")
+acprimary = ahs_climate.select(col("ACPRIMARY").value_counts(sort=True))
+print(acprimary) # 3 = No AC
+
+print("HEATTYPE")
+heattype = ahs_climate.select(col("HEATTYPE").value_counts(sort=True))
+print(heattype) # 3 = No AC

@@ -31,10 +31,12 @@ df, X_pd, model = load_data()
 # ---------------------------------------------------------------------------
 # Simple dimensions — single call each
 # ---------------------------------------------------------------------------
-run_heterogeneity("HHRACE",   df=df, X_pd=X_pd, model=model)
-run_heterogeneity("TENURE",   df=df, X_pd=X_pd, model=model)
-run_heterogeneity("DIVISION", df=df, X_pd=X_pd, model=model)
-run_heterogeneity("DISHH",    df=df, X_pd=X_pd, model=model)
+run_heterogeneity("HHRACE",         df=df, X_pd=X_pd, model=model)
+run_heterogeneity("TENURE",         df=df, X_pd=X_pd, model=model)
+run_heterogeneity("DIVISION",       df=df, X_pd=X_pd, model=model)
+run_heterogeneity("DISHH",          df=df, X_pd=X_pd, model=model)
+run_heterogeneity("ACPRIMARY",      df=df, X_pd=X_pd, model=model)
+run_heterogeneity("income_quintile", df=df, X_pd=X_pd, model=model)
 
 # ---------------------------------------------------------------------------
 # Age — bin HHAGE into cohorts first
